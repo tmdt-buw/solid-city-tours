@@ -1,0 +1,35 @@
+name: Solid Tours CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@hoelk-f"
+      - name: Install Catalog 0.8.62 and dependencies
+        run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm test
+      - run: npm run build
+      - uses: docker/setup-buildx-action@v3
+      - name: Verify the production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          secrets: |
+            npm_token=${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,413 @@
+.solid-tours-app {
+  --navy: #10284a;
+  --blue: #1759ad;
+  --blue-dark: #0f3f7a;
+  --green: #287a4d;
+  --amber: #d97706;
+  --red: #b42318;
+  --ink: #14253d;
+  --muted: #64748b;
+  --line: #dce4ef;
+  --surface: #ffffff;
+  --soft: #f5f7fb;
+  min-width: 0;
+  color: var(--ink);
+  background: var(--soft);
+  font-family: Manrope, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  container-name: solid-tours-layout;
+  container-type: inline-size;
+}
+
+.solid-tours-app,
+.solid-tours-app *,
+.solid-tours-app *::before,
+.solid-tours-app *::after { box-sizing: border-box; }
+.solid-tours-app .solid-tours-fa-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: visible;
+  vertical-align: -.125em;
+}
+.solid-tours-app button,
+.solid-tours-app input,
+.solid-tours-app select { font: inherit; }
+.solid-tours-app button { cursor: pointer; }
+.solid-tours-app button:disabled { cursor: not-allowed; opacity: .55; }
+.solid-tours-app h1,
+.solid-tours-app h2,
+.solid-tours-app p { margin-top: 0; }
+.solid-tours-app h1 { margin-bottom: 0; color: var(--navy); font-size: clamp(1.55rem, 2vw, 2rem); letter-spacing: -.035em; }
+.solid-tours-app h2 { margin-bottom: 5px; color: var(--navy); font-size: 1.08rem; }
+.solid-tours-app p { color: var(--muted); line-height: 1.5; }
+.solid-tours-app .eyebrow { display: block; margin-bottom: 5px; color: var(--blue); font-size: .68rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
+
+.solid-tours-app--loading { min-height: 100vh; }
+.solid-tours-app--standalone { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.solid-tours-app--embedded:not(.solid-tours-app--modal-open) { overflow: clip; }
+.solid-tours-app .tours-loading { min-height: 100vh; display: grid; place-items: center; margin: 0; color: #64748b; background: var(--soft); font-weight: 700; }
+.solid-tours-app--embedded.solid-tours-app--loading,
+.solid-tours-app--embedded .tours-loading { min-height: calc(var(--dataspace-scaled-vh, 100vh) - 230px); background: #fff; }
+
+@media (min-width: 900px) {
+  .solid-tours-app--standalone {
+    --solid-tours-standalone-scale: .7;
+    --dataspace-scaled-vw: calc(100vw / var(--solid-tours-standalone-scale));
+    --dataspace-scaled-vh: calc(100dvh / var(--solid-tours-standalone-scale));
+    height: var(--dataspace-scaled-vh);
+    zoom: var(--solid-tours-standalone-scale);
+  }
+
+  .solid-tours-app--standalone.solid-tours-app--loading,
+  .solid-tours-app--standalone .tours-loading {
+    min-height: var(--dataspace-scaled-vh);
+  }
+}
+
+.solid-tours-app .app-header { width: calc(100% - 40px); min-height: 54px; margin: 20px 20px 0; padding: 8px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: #fff; border: 1px solid rgba(255, 255, 255, .18); border-radius: 18px; background: linear-gradient(120deg, #0f172a 0%, #0b4ea2 55%, #1d4ed8 100%); box-shadow: 0 18px 40px rgba(15, 23, 42, .18); }
+.solid-tours-app .app-brand,
+.solid-tours-app .header-actions,
+.solid-tours-app .section-heading,
+.solid-tours-app .mode-row,
+.solid-tours-app .draft-actions,
+.solid-tours-app .dialog-actions { display: flex; align-items: center; }
+.solid-tours-app .app-brand { min-width: 0; gap: 10px; }
+.solid-tours-app .app-brand strong { overflow: hidden; color: #fff; font-size: 1rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.solid-tours-app .app-brand-mark { width: 22px; height: 22px; flex: 0 0 22px; display: grid; place-items: center; color: #facc15; font-size: 1rem; }
+.solid-tours-app .header-actions { min-width: 0; justify-content: flex-end; gap: 10px; flex-wrap: nowrap; }
+.solid-tours-app .header-user { min-width: 0; display: inline-flex; align-items: center; gap: 9px; }
+.solid-tours-app .header-user-avatar { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; overflow: hidden; color: #fff; font-size: 28px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 50%; background: rgba(255, 255, 255, .13); }
+.solid-tours-app .header-user-avatar--photo { object-fit: cover; }
+.solid-tours-app .header-user-name { max-width: min(640px, 46vw); overflow: hidden; color: #f8fafc; font-size: .82rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.solid-tours-app .header-user-webid { color: rgba(248, 250, 252, .9); }
+.solid-tours-app .language-toggle { height: 34px; min-height: 34px; display: inline-flex; align-items: center; grid-auto-flow: column; gap: 7px; padding: 3px 7px 3px 10px; color: #f8fafc; border: 1px solid rgba(255, 255, 255, .24); border-radius: 999px; background: rgba(255, 255, 255, .13); }
+.solid-tours-app .language-toggle__label { font-size: .76rem; font-weight: 800; white-space: nowrap; }
+.solid-tours-app .language-toggle__select { appearance: none; width: auto; min-width: 96px; min-height: 26px; padding: 3px 25px 3px 5px; color: #fff; border: 0; border-radius: 999px; background-color: transparent; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); background-position: right 5px center; background-repeat: no-repeat; background-size: 14px; font-size: .76rem; font-weight: 800; }
+.solid-tours-app .language-toggle__select option { color: #0f172a; background: #fff; }
+.solid-tours-app .language-toggle__select:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 2px; }
+.solid-tours-app .header-logout { height: 34px; min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 5px 13px; color: #fff; border: 1px solid rgba(255, 255, 255, .25); border-radius: 999px; background: rgba(255, 255, 255, .15); box-shadow: none; font-size: .76rem; font-weight: 800; white-space: nowrap; }
+.solid-tours-app .header-logout:not(:disabled):hover { background: rgba(255, 255, 255, .23); transform: none; }
+
+.solid-tours-app .tours-shell { min-width: 0; min-height: 0; padding: 18px; background: radial-gradient(circle at 8% 5%, rgba(23, 89, 173, .07), transparent 30rem), var(--soft); }
+.solid-tours-app--standalone .tours-shell { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.solid-tours-app--embedded .tours-shell { padding: 0; background: transparent; }
+.solid-tours-app .route-workspace { width: 100%; min-height: 520px; height: calc(100dvh - 198px); display: flex; position: relative; isolation: isolate; overflow: hidden; padding: 12px; border: 1px solid #e2e8f0; border-radius: 22px; background: rgba(255, 255, 255, .92); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 16px 40px rgba(15, 23, 42, .1); }
+.solid-tours-app--standalone .route-workspace { height: 100%; min-height: 0; flex: 1; }
+.solid-tours-app--embedded .route-workspace { min-height: 520px; height: calc(var(--dataspace-scaled-vh, 100vh) - 230px); }
+.solid-tours-app .planner-panel { width: 360px; max-width: 100%; flex: 0 0 360px; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid #e1e7ef; border-radius: 16px 0 0 16px; background: #f9fafb; }
+.solid-tours-app .planner-scroll { height: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.solid-tours-app .planner-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.solid-tours-app .panel-section { margin: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 24px rgba(16, 40, 74, .055); }
+.solid-tours-app .panel-section--planner { margin-bottom: 10px; }
+.solid-tours-app .section-heading { justify-content: space-between; gap: 14px; }
+.solid-tours-app .icon-button { width: 39px; height: 39px; min-height: 39px; flex: 0 0 39px; display: grid; place-items: center; padding: 0; border: 1px solid #cad8ea; border-radius: 11px; color: var(--blue); background: #f2f6fc; box-shadow: 0 3px 9px rgba(23, 89, 173, .08); }
+.solid-tours-app .icon-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.solid-tours-app .icon-button:not(:disabled):hover { border-color: #9bb7da; background: #e8f0fb; box-shadow: 0 6px 14px rgba(23, 89, 173, .14); }
+
+.solid-tours-app .form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 15px 0 11px; }
+.solid-tours-app label { min-width: 0; display: grid; gap: 5px; color: #405875; font-size: .73rem; font-weight: 800; }
+.solid-tours-app input,
+.solid-tours-app select { width: 100%; min-height: 44px; border: 1px solid #cbd7e5; border-radius: 10px; padding: 10px 11px; color: var(--ink); background: #fff; }
+.solid-tours-app input:focus,
+.solid-tours-app select:focus { outline: 3px solid rgba(23, 89, 173, .14); border-color: var(--blue); }
+.solid-tours-app .mode-row { align-items: stretch; gap: 8px; }
+.solid-tours-app button,
+.solid-tours-app .file-button { min-height: 42px; border: 0; border-radius: 10px; padding: 10px 13px; font-size: .76rem; font-weight: 820; line-height: 1.2; transition: transform .14s ease, box-shadow .14s ease, background .14s ease; }
+.solid-tours-app button:not(:disabled):hover,
+.solid-tours-app .file-button:hover { transform: translateY(-1px); }
+.solid-tours-app .primary { color: #fff; background: linear-gradient(135deg, #2f8755, #246d45); box-shadow: 0 8px 18px rgba(40, 122, 77, .22); }
+.solid-tours-app .secondary { color: #fff; background: linear-gradient(135deg, var(--blue), var(--blue-dark)); box-shadow: 0 8px 18px rgba(23, 89, 173, .18); }
+.solid-tours-app .danger { color: #fff; background: var(--red); }
+.solid-tours-app .ghost,
+.solid-tours-app .mode-row button,
+.solid-tours-app .file-button { color: #36506f; background: #edf2f7; }
+.solid-tours-app .mode-row button.active { color: #fff; background: var(--blue); box-shadow: 0 7px 16px rgba(23, 89, 173, .19); }
+.solid-tours-app .file-button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.solid-tours-app .file-button input { display: none; }
+.solid-tours-app .mode-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.solid-tours-app .mode-row > button,
+.solid-tours-app .mode-row > .file-button { width: 100%; height: 42px; min-height: 42px; margin: 0; }
+.solid-tours-app .mode-row > .file-button { color: #fff; background: linear-gradient(135deg, var(--blue), var(--blue-dark)); box-shadow: 0 8px 18px rgba(23, 89, 173, .18); }
+
+.solid-tours-app .save-draft-button { width: 100%; margin-top: 11px; }
+
+.solid-tours-app .count-badge { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: var(--blue); background: #eaf1fb; font-size: .74rem; }
+.solid-tours-app .item-list { display: grid; gap: 8px; margin-top: 11px; }
+.solid-tours-app .draft-item,
+.solid-tours-app .activity-item { overflow: hidden; border: 1px solid #e0e7ef; border-radius: 12px; background: #fff; }
+.solid-tours-app .draft-item--active { border-color: #9ebbe0; box-shadow: 0 0 0 3px rgba(23, 89, 173, .09); }
+.solid-tours-app .list-item { width: 100%; min-height: auto; display: grid; gap: 3px; padding: 11px; border-radius: 0; color: var(--ink); background: transparent; text-align: left; }
+.solid-tours-app .list-item:focus { outline: none; }
+.solid-tours-app .list-item:focus-visible { position: relative; z-index: 1; outline: 3px solid rgba(23, 89, 173, .3); outline-offset: -3px; }
+.solid-tours-app .list-item span,
+.solid-tours-app .activity-item strong { color: var(--navy); font-size: .82rem; }
+.solid-tours-app .list-item small,
+.solid-tours-app .activity-item small { display: block; margin-top: 3px; color: var(--muted); font-size: .69rem; font-weight: 550; line-height: 1.4; }
+.solid-tours-app .draft-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 0 10px 10px; }
+.solid-tours-app .draft-actions button { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .68rem; }
+.solid-tours-app .draft-actions .ghost { color: #fff; background: linear-gradient(135deg, var(--blue), var(--blue-dark)); box-shadow: 0 6px 14px rgba(23, 89, 173, .16); }
+.solid-tours-app .delete-link { color: #9d251f; background: #fff0ef; }
+.solid-tours-app .tour-completion { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; margin-top: 13px; padding-top: 13px; border-top: 1px solid #e2e8f0; }
+.solid-tours-app .tour-completion button { width: 100%; }
+.solid-tours-app .tour-completion .primary { color: #fff; background: linear-gradient(135deg, var(--blue), var(--blue-dark)); box-shadow: 0 8px 18px rgba(23, 89, 173, .18); }
+.solid-tours-app input[aria-invalid="true"] { border-color: #d56a63; background: #fff8f7; }
+.solid-tours-app .activity-item { display: grid; gap: 9px; padding: 11px; }
+.solid-tours-app .activity-delete { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .68rem; }
+.solid-tours-app .publish { width: 100%; min-height: 42px; padding: 10px 12px; color: #fff; background: linear-gradient(135deg, #3f914a, #2d7437); font-size: .74rem; line-height: 1.25; text-align: center; }
+.solid-tours-app .health-donation-actions { margin-top: 13px; padding-top: 13px; border-top: 1px solid #e2e8f0; }
+.solid-tours-app .health-donation-actions button { width: 100%; }
+.solid-tours-app .empty { margin: 2px 0; color: var(--muted); font-size: .75rem; }
+
+.solid-tours-app .map-stage { height: 100%; flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; isolation: isolate; overflow: hidden; border-radius: 0 16px 16px 0; background: #dfe7df; }
+.solid-tours-app .map-stage .tour-map { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 100%; border: 0; border-radius: 0; z-index: 0; }
+.solid-tours-app .map-legend,
+.solid-tours-app .map-stats,
+.solid-tours-app .map-edit-toolbar,
+.solid-tours-app .map-error-overlay { position: absolute; z-index: 750; border: 1px solid rgba(198, 209, 222, .95); border-radius: 13px; background: rgba(255, 255, 255, .93); box-shadow: 0 12px 30px rgba(16, 40, 74, .16); backdrop-filter: blur(10px); }
+.solid-tours-app .map-legend { top: 14px; right: 14px; min-width: 190px; display: grid; gap: 8px; padding: 13px; }
+.solid-tours-app .map-legend > strong { padding-bottom: 7px; border-bottom: 1px solid #e0e7ef; color: var(--navy); font-size: .82rem; }
+.solid-tours-app .map-legend > span { display: flex; align-items: center; gap: 9px; color: #405875; font-size: .7rem; font-weight: 700; }
+.solid-tours-app .legend-line { width: 28px; height: 0; display: inline-block; border-top: 4px solid; border-radius: 999px; }
+.solid-tours-app .legend-line--current { border-color: var(--amber); }
+.solid-tours-app .legend-line--saved { border-color: #174ea6; }
+.solid-tours-app .map-stats { top: 14px; left: 64px; display: grid; grid-template-columns: repeat(2, minmax(88px, 1fr)); overflow: hidden; }
+.solid-tours-app .map-stats > div { min-width: 0; display: grid; gap: 2px; padding: 11px 14px; }
+.solid-tours-app .map-stats > div + div { border-left: 1px solid #dce4ed; }
+.solid-tours-app .map-stats span { color: var(--muted); font-size: .65rem; font-weight: 750; }
+.solid-tours-app .map-stats strong { color: var(--navy); font-size: .88rem; white-space: nowrap; }
+.solid-tours-app .map-edit-toolbar { bottom: 34px; left: 14px; max-width: calc(100% - 28px); display: flex; flex-wrap: wrap; gap: 5px; padding: 6px; }
+.solid-tours-app .map-tool-button { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid transparent; color: #294765; background: transparent; font-size: .7rem; }
+.solid-tours-app .map-tool-button svg { width: 17px; height: 17px; flex: 0 0 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.solid-tours-app .map-tool-button:not(:disabled):hover { border-color: #cbd9e8; color: var(--blue); background: #edf4fc; }
+.solid-tours-app .map-tool-button--danger { color: #93332d; }
+.solid-tours-app .map-tool-button--danger:not(:disabled):hover { border-color: #f1c5c1; color: #8f211c; background: #fff0ef; }
+.solid-tours-app .map-tool-button:focus-visible { outline: 3px solid rgba(23, 89, 173, .25); outline-offset: 2px; }
+.solid-tours-app .map-error-overlay { top: 84px; right: 14px; left: 14px; width: auto; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 11px 12px 11px 14px; color: #8f211c; border-color: #e5aaa5; background: rgba(255, 241, 240, .97); }
+.solid-tours-app .map-error-overlay > span { flex: 1; font-size: .76rem; font-weight: 750; line-height: 1.4; }
+.solid-tours-app .map-error-close { width: 34px; height: 34px; min-height: 34px; flex: 0 0 34px; display: grid; place-items: center; padding: 0; border: 1px solid #efc4c0; color: #8f211c; background: #fff; }
+.solid-tours-app .map-error-close svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.solid-tours-app .map-error-close:not(:disabled):hover { color: #721a16; background: #fff7f6; transform: none; }
+.solid-tours-app .map-error-close:focus-visible { outline: 3px solid rgba(180, 35, 24, .2); outline-offset: 2px; }
+
+.solid-tours-app .modal-backdrop { position: fixed; inset: 0 auto auto 0; width: var(--dataspace-scaled-vw, 100vw); height: var(--dataspace-scaled-vh, 100dvh); z-index: 2000; display: grid; place-items: center; padding: 18px; background: rgba(8, 25, 47, .62); backdrop-filter: blur(5px); }
+.solid-tours-app .confirm-dialog { width: min(480px, 100%); max-height: calc(var(--dataspace-scaled-vh, 100dvh) - 36px); overflow: auto; padding: 26px; border: 1px solid #dbe3ee; border-radius: 19px; background: #fff; box-shadow: 0 28px 85px rgba(6, 24, 46, .34); }
+.solid-tours-app .confirm-dialog--danger { border-color: #efc4c0; }
+.solid-tours-app .confirm-dialog dl { display: grid; gap: 8px; margin: 19px 0; }
+.solid-tours-app .confirm-dialog dl > div { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 8px; border-bottom: 1px solid #e6ebf1; }
+.solid-tours-app .confirm-dialog dt { color: var(--muted); }
+.solid-tours-app .confirm-dialog dd { margin: 0; text-align: right; font-weight: 800; }
+.solid-tours-app .delete-confirmation-copy { margin: 14px 0 0; color: #405875; font-size: .84rem; }
+.solid-tours-app .activity-choice { min-width: 0; margin: 18px 0 0; padding: 0; border: 0; }
+.solid-tours-app .activity-choice legend { margin-bottom: 9px; color: var(--navy); font-size: .78rem; font-weight: 850; }
+.solid-tours-app .activity-choice > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.solid-tours-app .activity-choice label { min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border: 1px solid #cbd7e5; border-radius: 11px; color: #36506f; background: #f7f9fc; cursor: pointer; }
+.solid-tours-app .activity-choice label.selected { border-color: var(--blue); color: var(--blue-dark); background: #eaf2fc; box-shadow: 0 0 0 3px rgba(23, 89, 173, .1); }
+.solid-tours-app .activity-choice input { width: 17px; min-height: 17px; height: 17px; margin: 0; padding: 0; accent-color: var(--blue); }
+.solid-tours-app .confirm-dialog .activity-preview { margin: 15px 0 0; }
+.solid-tours-app .dialog-actions { justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.solid-tours-app .dialog-actions button { min-width: 116px; min-height: 42px; }
+.solid-tours-app .dialog-actions .danger { box-shadow: 0 8px 18px rgba(180, 35, 24, .18); }
+
+.solid-tours-app .completion-loading-backdrop {
+  cursor: wait;
+  opacity: 0;
+  animation: solid-tours-completion-backdrop-in .18s ease-out .12s forwards;
+}
+.solid-tours-app .completion-loading-card {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 13px;
+  padding: 24px 26px 26px;
+  overflow: hidden;
+  color: var(--navy);
+  text-align: center;
+  border: 1px solid rgba(203, 216, 234, .96);
+  border-radius: 21px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, .99), rgba(239, 246, 255, .98));
+  box-shadow: 0 30px 90px rgba(6, 24, 46, .38);
+  animation: solid-tours-completion-card-in .22s ease-out .12s both;
+}
+.solid-tours-app .completion-journey {
+  width: 100%;
+  height: 108px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 15px;
+  background: radial-gradient(circle at 80% 8%, rgba(250, 204, 21, .18), transparent 32%), linear-gradient(180deg, #f8fbff, #edf5ff);
+}
+.solid-tours-app .completion-journey svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.solid-tours-app .completion-route-shadow,
+.solid-tours-app .completion-route-dash { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.solid-tours-app .completion-route-shadow { stroke: #cad8e9; stroke-width: 10; }
+.solid-tours-app .completion-route-dash {
+  stroke: var(--blue);
+  stroke-width: 4;
+  stroke-dasharray: 7 8;
+  animation: solid-tours-completion-route-flow .8s linear infinite;
+}
+.solid-tours-app .completion-route-point { fill: #fff; stroke: var(--blue); stroke-width: 4; }
+.solid-tours-app .completion-route-point--destination {
+  fill: #facc15;
+  stroke: #fff;
+  filter: drop-shadow(0 3px 5px rgba(16, 40, 74, .3));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: solid-tours-completion-destination-pulse 1.15s ease-in-out infinite;
+}
+.solid-tours-app .completion-traveller {
+  width: 46px;
+  height: 46px;
+  position: absolute;
+  z-index: 2;
+  left: 7%;
+  top: 72%;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  will-change: left, top, opacity;
+  animation: solid-tours-completion-travel 3.6s linear infinite;
+}
+.solid-tours-app .completion-loading-card--cycling .completion-traveller { animation-duration: 2.45s; }
+.solid-tours-app .completion-traveller-badge {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2470c9, #0f3f7a);
+  box-shadow: 0 8px 18px rgba(15, 63, 122, .32);
+  animation: solid-tours-completion-bob .38s ease-in-out infinite alternate;
+}
+.solid-tours-app .completion-loading-card--cycling .completion-traveller-badge {
+  animation-duration: .56s;
+}
+.solid-tours-app .completion-traveller-badge .solid-tours-fa-icon { width: 24px; height: 24px; }
+.solid-tours-app .completion-loading-label { color: var(--navy); font-size: .92rem; font-weight: 850; }
+.solid-tours-app .completion-progress-rail {
+  height: 8px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbe7f5;
+}
+.solid-tours-app .completion-progress-rail > span {
+  width: 42%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #164f96, #2f7bd1 58%, #facc15);
+  box-shadow: 0 0 14px rgba(47, 123, 209, .36);
+  transform: translateX(-115%);
+  animation: solid-tours-completion-progress 1.15s ease-in-out infinite;
+}
+
+@keyframes solid-tours-completion-backdrop-in {
+  to { opacity: 1; }
+}
+
+@keyframes solid-tours-completion-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes solid-tours-completion-route-flow {
+  to { stroke-dashoffset: -15; }
+}
+
+@keyframes solid-tours-completion-destination-pulse {
+  50% { transform: scale(1.22); }
+}
+
+@keyframes solid-tours-completion-bob {
+  to { transform: translateY(-3px) rotate(-2deg); }
+}
+
+@keyframes solid-tours-completion-travel {
+  0% { left: 7%; top: 72%; opacity: 0; }
+  5% { opacity: 1; }
+  20% { left: 23%; top: 39%; }
+  40% { left: 40%; top: 58%; }
+  60% { left: 58%; top: 30%; }
+  80% { left: 76%; top: 52%; }
+  95% { left: 93%; top: 29%; opacity: 1; }
+  100% { left: 93%; top: 29%; opacity: 0; }
+}
+
+@keyframes solid-tours-completion-progress {
+  0% { transform: translateX(-115%); }
+  55% { transform: translateX(105%); }
+  100% { transform: translateX(255%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solid-tours-app .completion-loading-backdrop,
+  .solid-tours-app .completion-loading-card,
+  .solid-tours-app .completion-route-dash,
+  .solid-tours-app .completion-route-point--destination,
+  .solid-tours-app .completion-traveller,
+  .solid-tours-app .completion-traveller-badge,
+  .solid-tours-app .completion-progress-rail > span { animation: none; }
+  .solid-tours-app .completion-loading-backdrop { opacity: 1; }
+  .solid-tours-app .completion-traveller { left: 50%; top: 48%; opacity: 1; }
+  .solid-tours-app .completion-progress-rail > span { width: 42%; margin: 0 auto; opacity: .62; transform: none; }
+}
+
+.solid-tours-app .app-footer { position: relative; min-height: 70px; flex: 0 0 70px; padding: 0 150px; display: flex; align-items: center; justify-content: center; color: #475569; border-top: 1px solid #e2e8f0; background: #fff; box-shadow: 0 -10px 30px rgba(15, 23, 42, .08); font-size: .76rem; }
+.solid-tours-app .footer-logo-group { display: flex; align-items: center; gap: 28px; }
+.solid-tours-app .footer-logo { width: auto; object-fit: contain; }
+.solid-tours-app .footer-logo--buw { height: 42px; }
+.solid-tours-app .footer-logo--tmdt { height: 50px; }
+.solid-tours-app .footer-version { position: absolute; right: 20px; top: 50%; font-weight: 700; white-space: nowrap; transform: translateY(-50%); }
+
+/*
+ * The Dataspace Manager scales its document with CSS `zoom`. Viewport media
+ * queries still see the unscaled browser width. Container queries keep the
+ * split map layout responsive to the space the embed really receives from the
+ * Manager instead.
+ */
+@container solid-tours-layout (max-width: 950px) {
+  .solid-tours-app .map-legend { min-width: 140px; padding: 10px; }
+  .solid-tours-app .map-legend > span:nth-of-type(n + 2) { display: none; }
+  .solid-tours-app .map-error-overlay { top: 84px; }
+}
+
+@container solid-tours-layout (max-width: 760px) {
+  .solid-tours-app .route-workspace,
+  .solid-tours-app--embedded .route-workspace { min-height: 0; }
+  .solid-tours-app .map-stats { top: 10px; left: 60px; }
+  .solid-tours-app .map-edit-toolbar { top: 82px; bottom: auto; left: 10px; max-width: calc(100% - 20px); }
+  .solid-tours-app .map-error-overlay { top: 142px; right: 10px; left: 10px; }
+}
+
+@container solid-tours-layout (max-width: 560px) {
+  .solid-tours-app .app-header { width: calc(100% - 20px); margin: 10px 10px 0; align-items: flex-start; flex-direction: column; }
+  .solid-tours-app .header-actions { width: 100%; justify-content: flex-start; }
+  .solid-tours-app .header-logout { margin-left: auto; }
+  .solid-tours-app .tours-shell { padding: 10px; }
+  .solid-tours-app--embedded .tours-shell { padding: 0; }
+  .solid-tours-app .route-workspace { min-height: 0; border-radius: 15px; }
+  .solid-tours-app .map-legend { top: 74px; right: 10px; min-width: 0; padding: 9px; }
+  .solid-tours-app .map-legend > span:nth-of-type(n + 2) { display: none; }
+  .solid-tours-app .panel-section { margin: 10px; padding: 14px; }
+  .solid-tours-app button,
+  .solid-tours-app .file-button { min-height: 44px; }
+  .solid-tours-app .mode-row { grid-template-columns: 1fr; }
+  .solid-tours-app .mode-row > .file-button { grid-column: 1; }
+  .solid-tours-app .map-stats { top: 10px; left: 52px; }
+  .solid-tours-app .map-stats > div { padding: 9px 11px; }
+  .solid-tours-app .map-edit-toolbar { top: 74px; bottom: auto; left: 10px; max-width: calc(100% - 160px); }
+  .solid-tours-app .map-tool-button span { display: none; }
+  .solid-tours-app .map-tool-button { width: 40px; justify-content: center; padding: 8px; }
+  .solid-tours-app .map-error-overlay { top: 132px; }
+  .solid-tours-app .activity-choice > div { grid-template-columns: 1fr; }
+  .solid-tours-app .dialog-actions { display: grid; grid-template-columns: 1fr; }
+  .solid-tours-app .dialog-actions button { width: 100%; }
+  .solid-tours-app .app-footer { padding: 0 108px 0 12px; }
+  .solid-tours-app .footer-logo-group { gap: 12px; }
+  .solid-tours-app .footer-logo--buw { height: 32px; }
+  .solid-tours-app .footer-logo--tmdt { height: 38px; }
+  .solid-tours-app .footer-version { right: 10px; font-size: .66rem; }
+}

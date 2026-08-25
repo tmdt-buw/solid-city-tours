@@ -1,0 +1,435 @@
+.solid-tours-login {
+  --login-ink: #0f172a;
+  --login-muted: #64748b;
+  --login-line: #dbe3f3;
+  box-sizing: border-box;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 20px 40px;
+  color: var(--login-ink);
+  font-family: Manrope, Inter, "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, #e0edff 0%, transparent 55%),
+    radial-gradient(circle at 80% 0%, #f8f0ff 0%, transparent 45%),
+    #f8fafc;
+}
+
+.solid-tours-login *,
+.solid-tours-login *::before,
+.solid-tours-login *::after { box-sizing: border-box; }
+
+.solid-tours-login .solid-tours-fa-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: visible;
+  vertical-align: -.125em;
+}
+
+.solid-tours-login .solid-tours-login__stage {
+  box-sizing: content-box;
+  min-height: calc(100vh - 32px);
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 16px 0;
+}
+
+@media (min-width: 900px) {
+  .solid-tours-login {
+    min-height: calc(100vh / 0.7);
+    zoom: 0.7;
+  }
+}
+
+.solid-tours-login .solid-tours-login__language {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.solid-tours-login .language-toggle {
+  min-height: 42.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 5px 4px 12px;
+  color: var(--login-ink);
+  border: 1px solid var(--login-line);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.solid-tours-login .language-toggle__label { font-size: 0.82rem; font-weight: 800; }
+.solid-tours-login .language-toggle__select {
+  appearance: none;
+  min-width: 112px;
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 28px 5px 10px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1.5 5 5 5-5' fill='none' stroke='%230f172a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+
+.solid-tours-login .language-toggle__select:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.solid-tours-login .solid-tours-login__shell {
+  box-sizing: content-box;
+  position: relative;
+  width: min(980px, 100%);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 26px;
+  background: #f8fafc;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16);
+}
+
+.solid-tours-login .solid-tours-login__shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.18), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.15), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.12), transparent 55%);
+}
+
+.solid-tours-login .solid-tours-login__hero {
+  position: relative;
+  z-index: 1;
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px;
+  color: #fff;
+  background: linear-gradient(120deg, #0f172a 0%, #0b4ea2 48%, #fff 100%);
+}
+
+.solid-tours-login .solid-tours-login__hero-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.solid-tours-login .solid-tours-login__brand-icon {
+  box-sizing: content-box;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+}
+
+.solid-tours-login .solid-tours-login__title {
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.solid-tours-login .login-visual-band {
+  box-sizing: content-box;
+  position: relative;
+  z-index: 1;
+  height: clamp(336px, 42vw, 456px);
+  margin: 14px 16px;
+  overflow: hidden;
+  border-radius: 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, .28);
+  background: radial-gradient(circle at 48% 35%, rgba(30, 64, 175, .28), transparent 42%), linear-gradient(180deg, #0b1220 0%, #0f172a 62%, #111827 100%);
+  box-shadow: inset 0 24px 52px rgba(15, 23, 42, 0.38);
+}
+
+.solid-tours-login .login-particle-cloud {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.solid-tours-login .login-particle-cloud.is-dragging { cursor: grabbing; }
+.solid-tours-login .login-particle-cloud canvas { width: 100%; height: 100%; display: block; }
+.solid-tours-login .login-particle-cloud::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(286px, 36%);
+  aspect-ratio: 1;
+  border: 1px solid rgba(226, 232, 240, .16);
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(226, 232, 240, .055), rgba(226, 232, 240, .025) 58%, transparent 72%);
+  box-shadow: inset 0 0 42px rgba(15, 23, 42, .45), 0 0 44px rgba(147, 197, 253, .12);
+  transform: translate(-50%, -50%);
+}
+.solid-tours-login .login-particle-cloud__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  color: #f8fafc;
+  font-size: clamp(13px, 1.55vw, 19px);
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-align: center;
+  text-shadow: 0 0 14px rgba(147, 197, 253, .62), 0 2px 8px rgba(15, 23, 42, .95);
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.solid-tours-login .login-particle-cloud--fallback {
+  background: radial-gradient(circle at 35% 42%, rgba(248, 250, 252, .74) 0 2px, transparent 3px), radial-gradient(circle at 64% 56%, rgba(147, 197, 253, .66) 0 2px, transparent 3px), linear-gradient(180deg, #0b1220, #111827);
+  background-size: 42px 42px, 54px 54px, auto;
+}
+
+.solid-tours-login .solid-tours-login__card {
+  position: relative;
+  z-index: 1;
+  padding: 20px 22px 17px;
+  background: #fff;
+}
+
+.solid-tours-login .solid-tours-login__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.solid-tours-login .solid-tours-login__legend,
+.solid-tours-login .solid-tours-login__label {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.solid-tours-login .solid-tours-login__providers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.solid-tours-login .solid-tours-login__provider {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  height: 66px;
+  padding: 14px;
+  color: var(--login-ink);
+  text-align: left;
+  font: inherit;
+  border: 1px solid var(--login-line);
+  border-radius: 18px;
+  background: #f8fbff;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  cursor: pointer;
+  transition: transform 80ms ease, background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.solid-tours-login .solid-tours-login__provider:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: #f1f6ff;
+}
+
+.solid-tours-login .solid-tours-login__provider--active {
+  border-color: #b9d4ff;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+.solid-tours-login .solid-tours-login__radio {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 2px;
+  border: 2px solid #9ab7e6;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.solid-tours-login .solid-tours-login__provider--active .solid-tours-login__radio { border-color: #1d4ed8; }
+.solid-tours-login .solid-tours-login__provider--active .solid-tours-login__radio::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1d4ed8;
+  transform: translate(-50%, -50%);
+}
+
+.solid-tours-login .solid-tours-login__provider-copy { min-width: 0; display: grid; gap: 2px; }
+.solid-tours-login .solid-tours-login__provider-copy strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+.solid-tours-login .solid-tours-login__provider-copy > span {
+  overflow: hidden;
+  color: var(--login-muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solid-tours-login .solid-tours-login__custom { margin-top: 12px; }
+.solid-tours-login .solid-tours-login__input-wrap { position: relative; }
+.solid-tours-login .solid-tours-login__input {
+  appearance: none;
+  width: 100%;
+  padding: 10px 44px 10px 12px;
+  color: var(--login-ink);
+  font: inherit;
+  font-size: 0.88rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  outline: none;
+  background: #fff;
+}
+
+.solid-tours-login .solid-tours-login__input:focus {
+  border-color: #b9d4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+.solid-tours-login .solid-tours-login__input--invalid { border-color: #dc6b65; }
+.solid-tours-login .solid-tours-login__clear {
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #64748b;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  border: 0;
+  border-radius: 10px;
+  background: #f1f5f9;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.solid-tours-login .solid-tours-login__validation { margin: 7px 0 0; color: #af3535; font-size: 0.76rem; }
+.solid-tours-login .solid-tours-login__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 11px 13px;
+  color: #8f2929;
+  font-size: 0.84rem;
+  border: 1px solid #f2c0c0;
+  border-radius: 11px;
+  background: #fff3f3;
+}
+.solid-tours-login .solid-tours-login__error p { margin: 0; }
+.solid-tours-login .solid-tours-login__error > span {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  border-radius: 50%;
+  background: #b83e3e;
+}
+
+.solid-tours-login .solid-tours-login__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+.solid-tours-login .solid-tours-login__submit {
+  appearance: none;
+  min-height: 42.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.75rem 1.3rem;
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #1d4ed8 0%, #2563eb 100%);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.3);
+  cursor: pointer;
+}
+
+.solid-tours-login .solid-tours-login__provider:focus-visible,
+.solid-tours-login .solid-tours-login__clear:focus-visible,
+.solid-tours-login .solid-tours-login__submit:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 2px;
+}
+
+.solid-tours-login .solid-tours-login__provider:disabled,
+.solid-tours-login .solid-tours-login__input:disabled,
+.solid-tours-login .solid-tours-login__clear:disabled,
+.solid-tours-login .solid-tours-login__submit:disabled { cursor: not-allowed; opacity: 0.6; }
+
+@media (max-width: 560px) {
+  .solid-tours-login { padding-inline: 12px; }
+  .solid-tours-login .solid-tours-login__shell { border-radius: 20px; }
+  .solid-tours-login .login-visual-band { height: 312px; margin: 12px; border-radius: 20px; }
+  .solid-tours-login .solid-tours-login__providers { grid-template-columns: 1fr; }
+  .solid-tours-login .solid-tours-login__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .solid-tours-login .solid-tours-login__language,
+  .solid-tours-login .language-toggle { width: 100%; min-width: 0; }
+  .solid-tours-login .language-toggle { justify-content: space-between; }
+  .solid-tours-login .language-toggle__select { flex: 1 1 auto; }
+  .solid-tours-login .solid-tours-login__submit { min-width: 108px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solid-tours-login .solid-tours-login__provider { transition: none; }
+}
