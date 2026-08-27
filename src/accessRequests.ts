@@ -137,7 +137,7 @@ export async function revokeAndArchiveScenarioAccess({
 }): Promise<number> {
   const authenticatedFetch = noCache(fetcher);
   const inbox = await resolveInbox(ownerWebId, authenticatedFetch);
-  if (!inbox) throw new Error("Hannahs Solid-Inbox konnte nicht aufgelöst werden.");
+  if (!inbox) throw new Error("Die Solid-Inbox konnte nicht aufgelöst werden.");
   const container = await getSolidDataset(inbox, { fetch: authenticatedFetch });
   const candidates = getContainedResourceUrlAll(container);
   const matches: ScenarioRequest[] = [];

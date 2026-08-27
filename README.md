@@ -1,8 +1,8 @@
 # Solid Tours
 
-Solid Tours is the Komoot-like demo application for the Solid Dataspace stack. It lets Hannah
-Müller draw activity-neutral tours, import GPX/GeoJSON, record completed activities without
-GPS tracking, and explicitly publish one restricted GeoJSON scenario bundle at a time.
+Solid Tours is the Komoot-like application for the Solid Dataspace stack. It lets Solid users draw
+activity-neutral tours, import GPX/GeoJSON, record completed activities without GPS tracking, and
+explicitly publish one restricted GeoJSON scenario bundle per Pod at a time.
 
 ## Development
 
@@ -20,32 +20,30 @@ The package also exports
 Manager. The embed reuses the host's authenticated Solid session and intentionally omits its own
 login, header and footer so the Manager remains responsible for the surrounding application chrome.
 
-Every authenticated Solid account can use tour planning, imports, completed activities and a
-browser-local history. Mistaken completed entries can be deleted; an entry included in the active
-health-data donation remains protected until that scenario is reset. Local state is separated by WebID so accounts sharing a browser cannot see
-each other's tours. Existing data from the former unscoped browser key is moved once to the first
-account that logs in, after which the shared key is removed. Only the exact configured demo WebID may use Pod-backed storage, interests,
-restricted publication and scenario reset. The default is
-`https://solid-community-server.tmdt.info/sscon/profile/card#me`. Hosts can override it with
-the `demoWebId` embed prop or, before the standalone bundle loads, with
-`window.__SOLID_TOURS_CONFIG__ = { demoWebId: "https://...#me" }`. Invalid configuration fails
-closed: the local application remains usable while all Pod and scenario features stay hidden.
+Every authenticated Solid account uses its resolved Pod for private drafts, completed activities,
+interests, restricted publication and scenario reset. Mistaken completed entries can be deleted;
+an entry included in the active health-data donation remains protected until that scenario is
+reset. An unauthenticated embed can still use browser-local storage. The former `demoWebId` embed
+prop and runtime setting remain accepted for host compatibility, but no longer restrict Pod access.
+If an authenticated Pod cannot be resolved or initialized, the application fails closed and does
+not silently store that user's data in the browser.
 
 ## Demo contract
 
-- Authenticated non-demo users store drafts and completed activities only in WebID-namespaced
-  browser `localStorage`. This local state cannot contain an active scenario run. The standalone
+- Authenticated users store drafts and completed activities as private resources below
+  `solid-tours/` in their resolved Pod; existing Pod state is loaded unchanged. The standalone
   application requires login; an embedding host may still render a guest-local mode when it does
   not provide an identity.
-- For the configured Hannah demo identity, drafts remain private GeoJSON files below
-  `solid-tours/drafts/`; existing Pod state is loaded unchanged.
 - `Tour gemacht` requires an explicit walking or cycling choice, previews the locally calculated
-  values for that choice and then stores an activity in the active local or Hannah-Pod storage
+  values for that choice and then stores an activity in the active local or Solid-Pod storage
   mode. No GPS or Health App resource is read or written.
-- The five generic interests are created only for Hannah, once in the owner-only
+- The five generic interests are created once per authenticated user in the owner-only
   `solid-tours/interests.ttl`.
 - Explicit publication creates one private `runs/{scenarioRunId}/activity.geojson`, a private
   `manifest.ttl`, one restricted Catalog dataset and the public `public/current-run.json` marker.
+- Publication requires a public Dataspace registry configured in the user's Solid profile. The
+  Catalog API registers the WebID there before reporting success, so the multi-user worker can
+  discover the marker. Private-registry-only accounts fail closed for this public aggregate flow.
 - Reset revokes matching Access Request permissions, archives the request, removes the marker,
   Catalog entry and run resources, while retaining drafts, activities and interests.
 

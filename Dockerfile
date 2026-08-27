@@ -3,7 +3,7 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 COPY package*.json ./
-RUN --mount=type=secret,id=npm_token,required=false sh -c 'TOKEN="$(cat /run/secrets/npm_token 2>/dev/null || true)"; if [ -n "$TOKEN" ]; then printf "@hoelk-f:registry=https://npm.pkg.github.com/\n//npm.pkg.github.com/:_authToken=%s\n" "$TOKEN" > /tmp/npmrc; NPM_CONFIG_USERCONFIG=/tmp/npmrc npm install; rm -f /tmp/npmrc; else npm install; fi'
+RUN --mount=type=secret,id=npm_token,required=false sh -c 'TOKEN="$(cat /run/secrets/npm_token 2>/dev/null || true)"; if [ -n "$TOKEN" ]; then printf "@hoelk-f:registry=https://npm.pkg.github.com/\n//npm.pkg.github.com/:_authToken=%s\n" "$TOKEN" > /tmp/npmrc; NPM_CONFIG_USERCONFIG=/tmp/npmrc npm ci; rm -f /tmp/npmrc; else npm ci; fi'
 COPY . .
 RUN npm run build:app
 

@@ -290,6 +290,14 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.saveState.mockReset();
     podNetworkMocks.saveStateIfUnchanged.mockReset();
     podNetworkMocks.writePublishedMarker.mockReset();
+    podNetworkMocks.resolvePodRoot.mockResolvedValue("https://pods.example/alex/");
+    podNetworkMocks.ensureStorage.mockResolvedValue(undefined);
+    podNetworkMocks.loadState.mockResolvedValue({
+      schemaVersion: 1,
+      drafts: [],
+      activities: [],
+      activeRun: null,
+    });
     podNetworkMocks.loadDraftMasterSnapshot.mockResolvedValue({ etag: '"draft-v1"' });
     podNetworkMocks.saveDraftConditionally.mockResolvedValue({ etag: '"draft-v2"' });
     podNetworkMocks.saveActivityConditionally.mockResolvedValue({ etag: '"activity-new"' });
@@ -314,7 +322,7 @@ describe("Solid Tours app shells", () => {
     container.remove();
   });
 
-  it("shows the same plain loading treatment as embedded external apps while Hannah's Pod state is resolving", async () => {
+  it("shows the same plain loading treatment as embedded external apps while a Pod state is resolving", async () => {
     podNetworkMocks.resolvePodRoot.mockReturnValue(new Promise<string>(() => undefined));
 
     act(() =>
@@ -392,7 +400,7 @@ describe("Solid Tours app shells", () => {
     expect(container.textContent).toContain("Suggested providers");
   });
 
-  it("shows standalone header, workspace and footer after a non-Hannah login", async () => {
+  it("uses Pod storage and shows the standalone shell for an arbitrary Solid login", async () => {
     act(() => root.render(createElement(App, { webIdOverride: NON_HANNAH_WEB_ID })));
 
     await waitForDom(() => {
@@ -406,7 +414,11 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".publish")).toBeNull();
     expect(container.querySelector(".header-reset")).toBeNull();
     expect(sessionMocks.restoreSession).toHaveBeenCalledOnce();
-    expect(podNetworkMocks.resolvePodRoot).not.toHaveBeenCalled();
+    expect(podNetworkMocks.resolvePodRoot).toHaveBeenCalledWith(
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
+    expect(podNetworkMocks.ensureStorage).toHaveBeenCalled();
     expect(leafletMocks.mapFactory).toHaveBeenCalledOnce();
   });
 
@@ -497,11 +509,8 @@ describe("Solid Tours app shells", () => {
     }
   });
 
-  it("renders a non-Hannah embed as local workspace without standalone or scenario chrome", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
+  it("renders an arbitrary authenticated embed from its Pod without standalone chrome", async () => {
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
 
     act(() =>
       root.render(
@@ -522,13 +531,13 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".app-header")).toBeNull();
     expect(container.querySelector(".app-footer")).toBeNull();
     expect(container.querySelector(".scenario-card")).toBeNull();
-    expect(container.querySelector(".publish")).toBeNull();
+    expect(container.querySelector(".publish")).not.toBeNull();
     expect(container.querySelector(".header-reset")).toBeNull();
     expect(container.querySelector(".sample-routes")).toBeNull();
     expect(container.querySelector(".map-hint")).toBeNull();
     expect(container.textContent).not.toContain("Beispielrouten zum Importieren");
     expect(container.textContent).not.toContain("Route zeichnen");
-    expect(container.textContent).not.toContain("Gesundheitsdatenspende freigeben");
+    expect(container.textContent).toContain("Gesundheitsdatenspende freigeben");
     expect(container.textContent).not.toContain("Szenario zurücksetzen");
     expect(container.textContent).not.toContain("Lokal");
     expect(container.textContent).not.toContain("Route & Aktivität");
@@ -542,7 +551,10 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".planner-route")).toBeNull();
     expect(sessionMocks.restoreSession).not.toHaveBeenCalled();
     expect(sessionMocks.fetch).not.toHaveBeenCalled();
-    expect(podNetworkMocks.resolvePodRoot).not.toHaveBeenCalled();
+    expect(podNetworkMocks.resolvePodRoot).toHaveBeenCalledWith(
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
     expect(leafletMocks.mapFactory).toHaveBeenCalledOnce();
 
     const completeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -587,10 +599,7 @@ describe("Solid Tours app shells", () => {
   });
 
   it("keeps embed state while following controlled English and German language props", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
     const props = {
       webId: NON_HANNAH_WEB_ID,
       demoWebId: HANNAH_WEB_ID,
@@ -842,10 +851,7 @@ describe("Solid Tours app shells", () => {
   });
 
   it("does not show a success notification after saving a completed tour", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
     act(() =>
       root.render(
         createElement(SolidToursEmbed, {
@@ -882,10 +888,7 @@ describe("Solid Tours app shells", () => {
   });
 
   it("creates a cycling activity only after cycling is explicitly selected", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
     act(() =>
       root.render(
         createElement(SolidToursEmbed, {
@@ -919,11 +922,23 @@ describe("Solid Tours app shells", () => {
     const newestActivity = container.querySelector(".activity-item")!;
     expect(newestActivity.textContent).toContain("km/h");
     expect(newestActivity.textContent).not.toContain("Schritte");
-    const stored = JSON.parse(
-      window.localStorage.getItem(localStateKeyForIdentity(NON_HANNAH_WEB_ID))!
+    expect(podNetworkMocks.saveActivityConditionally).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ activityType: "cycling" }),
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
     );
-    expect(stored.activities[0].activityType).toBe("cycling");
-    expect(stored.drafts[0]).not.toHaveProperty("activityType");
+    expect(podNetworkMocks.saveState).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        activities: expect.arrayContaining([
+          expect.objectContaining({ activityType: "cycling" }),
+        ]),
+      }),
+      expect.anything(),
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
   });
 
   it.each([
@@ -1059,16 +1074,15 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelectorAll(".activity-item")).toHaveLength(1);
   });
 
-  it("deletes a completed activity from the identity-scoped browser history after confirmation", async () => {
+  it("deletes a completed activity from guest-local history after confirmation", async () => {
     window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
+      localStateKeyForIdentity(null),
       JSON.stringify(localStateWithActivity)
     );
     act(() =>
       root.render(
         createElement(SolidToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
+          webId: null,
         })
       )
     );
@@ -1090,7 +1104,7 @@ describe("Solid Tours app shells", () => {
       expect(container.querySelectorAll(".activity-item")).toHaveLength(0);
     });
     const stored = JSON.parse(
-      window.localStorage.getItem(localStateKeyForIdentity(NON_HANNAH_WEB_ID))!
+      window.localStorage.getItem(localStateKeyForIdentity(null))!
     );
     expect(stored.activities).toEqual([]);
     expect(stored.drafts).toHaveLength(1);
@@ -1340,7 +1354,7 @@ describe("Solid Tours app shells", () => {
     expect(podNetworkMocks.saveState).not.toHaveBeenCalled();
   });
 
-  it("re-reads Hannah's Pod state, preserves remote additions and conditionally updates state before DELETE", async () => {
+  it("re-reads the user's Pod state, preserves remote additions and conditionally updates state before DELETE", async () => {
     const podRoot = "https://solid-community-server.tmdt.info/sscon/";
     const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
     podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
@@ -2001,7 +2015,7 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".map-error-overlay")).toBeNull();
   });
 
-  it("shows a dismissible demo-configuration error inside the map", async () => {
+  it("keeps the deprecated demo-WebID prop compatible without gating Pod access", async () => {
     act(() =>
       root.render(
         createElement(SolidToursEmbed, {
@@ -2011,20 +2025,15 @@ describe("Solid Tours app shells", () => {
       )
     );
 
-    await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-        "Demo-Pod-Konfiguration"
-      );
-    });
-    const overlay = container.querySelector(".map-error-overlay")!;
-    expect(overlay.closest(".map-stage")).not.toBeNull();
-    act(() => {
-      overlay.querySelector<HTMLButtonElement>('[aria-label="Fehlermeldung schließen"]')!.click();
-    });
+    await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
     expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(podNetworkMocks.resolvePodRoot).toHaveBeenCalledWith(
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
   });
 
-  it("uses the injected Manager session fetch to resolve Hannah's Pod in the embed", async () => {
+  it("uses the injected Manager session fetch to resolve the user's Pod in the embed", async () => {
     const podRoot = "https://solid-community-server.tmdt.info/sscon/";
     const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
     podNetworkMocks.resolvePodRoot.mockImplementation(
@@ -2093,9 +2102,9 @@ describe("Solid Tours app shells", () => {
     const podRoot = "https://solid-community-server.tmdt.info/sscon/";
     const hannahFetch = vi.fn(async () => new Response(null, { status: 204 }));
     const otherFetch = vi.fn(async () => new Response(null, { status: 204 }));
-    let operationFetch!: typeof fetch;
+    let firstIdentityOperationFetch!: typeof fetch;
     podNetworkMocks.resolvePodRoot.mockImplementation(async (webId, fetcher) => {
-      operationFetch = fetcher;
+      if (webId === HANNAH_WEB_ID) firstIdentityOperationFetch = fetcher;
       await fetcher(webId);
       return podRoot;
     });
@@ -2130,11 +2139,11 @@ describe("Solid Tours app shells", () => {
     );
     await act(async () => Promise.resolve());
 
-    await expect(operationFetch(`${podRoot}solid-tours/state.json`)).rejects.toThrow(
+    await expect(firstIdentityOperationFetch(`${podRoot}solid-tours/state.json`)).rejects.toThrow(
       /Solid-Sitzung hat sich geaendert/
     );
     expect(hannahFetch).toHaveBeenCalledOnce();
-    expect(otherFetch).not.toHaveBeenCalled();
+    expect(otherFetch).toHaveBeenCalledOnce();
   });
 
   it("allows only one of two parallel tabs past the publish-intent reservation", async () => {

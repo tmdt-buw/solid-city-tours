@@ -5,6 +5,8 @@ declare module "@hoelk-f/semantic-data-catalog/catalog-api" {
   };
 
   export type RestrictedDatasetInput = {
+    /** Resolved Pod root; supported by newer Catalog API versions. */
+    podRoot?: string;
     identifier: string;
     title?: string;
     description?: string;
@@ -21,6 +23,7 @@ declare module "@hoelk-f/semantic-data-catalog/catalog-api" {
     creatorWebId?: string;
     includeCreator?: boolean;
     theme?: string;
+    requireDiscoverableRegistry?: boolean;
   };
 
   export function publishRestrictedDataset(
@@ -35,6 +38,6 @@ declare module "@hoelk-f/semantic-data-catalog/catalog-api" {
 
   export function removeDataset(
     session: RestrictedCatalogSession,
-    reference: { identifier?: string; datasetUrl?: string }
+    reference: { identifier?: string; datasetUrl?: string; podRoot?: string }
   ): Promise<{ removed: true; identifier: string; datasetUrl: string }>;
 }

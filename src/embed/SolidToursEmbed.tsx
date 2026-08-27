@@ -5,6 +5,7 @@ export type { SolidToursSession } from "../embedAuth";
 
 export type SolidToursEmbedProps = {
   webId?: string | null;
+  /** @deprecated Pod access is available to every authenticated Solid identity. */
   demoWebId?: string | null;
   language?: string | null;
   session?: SolidToursSession | null;

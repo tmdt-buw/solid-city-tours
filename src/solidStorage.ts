@@ -26,24 +26,76 @@ export const EMPTY_STATE: ToursState = {
 
 const normalizeContainer = (url: string) => (url.endsWith("/") ? url : `${url}/`);
 
-function derivePodRoot(webId: string): string {
-  const url = new URL(webId);
-  const path = url.pathname.replace(/\/+$/, "");
-  if (path.endsWith("/profile/card")) {
-    return normalizeContainer(`${url.origin}${path.slice(0, -"/profile/card".length)}`);
+function normalizeResolvedPodRoot(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
   }
-  const firstSegment = path.split("/").filter(Boolean)[0];
-  return normalizeContainer(firstSegment ? `${url.origin}/${firstSegment}` : url.origin);
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
+  }
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+  return url.href;
 }
 
-export async function resolvePodRoot(webId: string, fetcher: SolidFetch): Promise<string> {
+/**
+ * CSS-style accounts conventionally use `{podRoot}/profile/card#me`. This is
+ * the only WebID layout that can be derived without trusting a profile storage
+ * declaration. Other layouts must expose pim:storage and therefore fail closed
+ * when discovery is unavailable.
+ */
+export function deriveCssPodRoot(webId: string): string {
+  let url: URL;
   try {
-    const podUrls = await getPodUrlAll(webId, { fetch: fetcher });
-    if (podUrls.length) return normalizeContainer(podUrls[0]);
+    url = new URL(webId);
   } catch {
-    // The CSS-style WebID fallback below keeps the fixed demo usable.
+    throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
   }
-  return derivePodRoot(webId);
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    !url.pathname.replace(/\/+$/, "").endsWith("/profile/card")
+  ) {
+    throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
+  }
+  const path = url.pathname.replace(/\/+$/, "");
+  return normalizeResolvedPodRoot(
+    `${url.origin}${path.slice(0, -"/profile/card".length) || "/"}`
+  );
+}
+
+type PodUrlResolver = (
+  webId: string,
+  options: { fetch: SolidFetch }
+) => Promise<string[]>;
+
+export async function resolvePodRoot(
+  webId: string,
+  fetcher: SolidFetch,
+  resolvePodUrls: PodUrlResolver = getPodUrlAll
+): Promise<string> {
+  let podUrls: string[];
+  try {
+    podUrls = await resolvePodUrls(webId, { fetch: fetcher });
+  } catch {
+    // A transient profile or network failure is not evidence that the WebID
+    // document and the Pod share a CSS-style path. Do not guess a write target.
+    throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
+  }
+  if (podUrls.length) return normalizeResolvedPodRoot(podUrls[0]);
+  // A successfully read profile without pim:storage may still be a CSS account
+  // using the canonical /profile/card layout.
+  return deriveCssPodRoot(webId);
 }
 
 const errorStatus = (error: any) => error?.statusCode || error?.response?.status || error?.status;

@@ -19,7 +19,11 @@ vi.mock("@inrupt/solid-client", async (importOriginal) => {
   return { ...actual, getSolidDataset: solidClientMocks.getSolidDataset };
 });
 
-import { catalogPublicationReference, publishCatalogEntry } from "./catalog";
+import {
+  catalogPublicationReference,
+  publishCatalogEntry,
+  removeCatalogEntry,
+} from "./catalog";
 import {
   addUrl,
   createSolidDataset,
@@ -96,6 +100,7 @@ describe("Solid Tours catalog publication", () => {
         contactPoint: "hannah.mueller@sscon-praesentation.de",
         creatorWebId: HANNAH_WEB_ID,
         includeCreator: true,
+        requireDiscoverableRegistry: true,
       })
     );
     const publicationInput = catalogApiMocks.publishRestrictedDataset.mock.calls[0]?.[1];
@@ -177,18 +182,66 @@ describe("Solid Tours catalog publication", () => {
     });
   });
 
-  it("fails before publication when the Catalog SDK WebID root differs from storage", async () => {
+  it("forwards the resolved storage Pod root instead of rejecting non-CSS WebID layouts", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await publishCatalogEntry({
+      podRoot: "https://pod.example/other/",
+      webId: HANNAH_WEB_ID,
+      scenarioRunId: "run-1",
+      resourceUrl:
+        "https://solid-community-server.tmdt.info/sscon/solid-tours/runs/run-1/activity.geojson",
+      fetcher,
+    });
+    expect(catalogApiMocks.publishRestrictedDataset).toHaveBeenCalledWith(
+      expect.objectContaining({ fetch: fetcher }),
+      expect.objectContaining({ podRoot: "https://pod.example/other/" })
+    );
+  });
+
+  it("uses the resolved storage Pod root when removing a Catalog entry", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await removeCatalogEntry({
+      podRoot: "https://storage.example/alex/",
+      webId: "https://identity.example/profile/alex#me",
+      datasetIdentifier: "solid-tours-activity-run-2",
+      catalogDatasetUrl:
+        "https://storage.example/alex/catalog/ds/solid-tours-activity-run-2.ttl#it",
+      fetcher,
+    });
+
+    expect(catalogApiMocks.removeDataset).toHaveBeenCalledWith(
+      {
+        info: {
+          isLoggedIn: true,
+          webId: "https://identity.example/profile/alex#me",
+        },
+        fetch: fetcher,
+      },
+      {
+        identifier: "solid-tours-activity-run-2",
+        datasetUrl:
+          "https://storage.example/alex/catalog/ds/solid-tours-activity-run-2.ttl#it",
+        podRoot: "https://storage.example/alex/",
+      }
+    );
+  });
+
+  it("turns a missing public registry into an actionable publish error", async () => {
+    catalogApiMocks.publishRestrictedDataset.mockRejectedValueOnce(
+      Object.assign(new Error("registry required"), {
+        code: "discoverable-registry-required",
+      })
+    );
+
     await expect(
       publishCatalogEntry({
-        podRoot: "https://pod.example/other/",
-        webId: HANNAH_WEB_ID,
-        scenarioRunId: "run-1",
+        podRoot: "https://storage.example/alex/",
+        webId: "https://identity.example/alex#me",
+        scenarioRunId: "run-3",
         resourceUrl:
-          "https://solid-community-server.tmdt.info/sscon/solid-tours/runs/run-1/activity.geojson",
+          "https://storage.example/alex/solid-tours/runs/run-3/activity.geojson",
         fetcher: vi.fn<typeof fetch>(),
       })
-    ).rejects.toThrow(/Pod-Root/);
-    expect(catalogApiMocks.publishRestrictedDataset).not.toHaveBeenCalled();
-    expect(solidClientMocks.getSolidDataset).not.toHaveBeenCalled();
+    ).rejects.toThrow(/öffentliche Dataspace-Registry/);
   });
 });

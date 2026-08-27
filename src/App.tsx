@@ -21,7 +21,7 @@ import {
   publishedActivityCollection,
   routeDistanceMeters,
 } from "./domain";
-import { hasDemoPodAccess, resolveDemoWebId, storageModeForIdentity } from "./demoAccess";
+import { hasSolidPodAccess, storageModeForIdentity } from "./storageMode";
 import { importRouteFile } from "./importers";
 import { datePlaceholder, formatDate, parseDate } from "./dateUtils";
 import {
@@ -194,6 +194,7 @@ async function persistRecoveryRunAfterPartialRollback({
 export type ToursAppProps = {
   embedded?: boolean;
   webIdOverride?: string | null;
+  /** @deprecated Pod access is available to every authenticated Solid identity. */
   demoWebIdOverride?: string | null;
   language?: string | null;
   session?: SolidToursSession | null;
@@ -438,7 +439,7 @@ function CompletionLoadingOverlay({
 export default function App({
   embedded = false,
   webIdOverride = null,
-  demoWebIdOverride = null,
+  demoWebIdOverride: _legacyDemoWebIdOverride = null,
   language: languageProp = null,
   session: injectedSession = null,
 }: ToursAppProps) {
@@ -491,16 +492,6 @@ export default function App({
       document.documentElement.lang = previousLanguage;
     };
   }, [embedded, language]);
-  const demoConfiguration = useMemo(() => {
-    try {
-      return { webId: resolveDemoWebId(demoWebIdOverride), error: null };
-    } catch {
-      return {
-        webId: null,
-        error: "Die Demo-Pod-Konfiguration ist ungültig. Die Tourenplanung bleibt verfügbar.",
-      };
-    }
-  }, [demoWebIdOverride]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authenticatedWebId, setAuthenticatedWebId] = useState<string | null>(null);
   const [authenticatedFetch, setAuthenticatedFetch] = useState<SolidFetch | null>(null);
@@ -519,7 +510,6 @@ export default function App({
   const [busy, setBusy] = useState(false);
   const [completionInProgress, setCompletionInProgress] = useState<ActivityType | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [demoErrorDismissed, setDemoErrorDismissed] = useState(false);
   const [bridge, setBridge] = useState<HostAuthBridge | null>(null);
   const [completeConfirmation, setCompleteConfirmation] = useState<{
     completedDate: string;
@@ -530,7 +520,7 @@ export default function App({
     useState<DeleteConfirmation | null>(null);
   const authRevision = useRef(0);
   const completionOperationRevision = useRef(0);
-  const demoPodAccessActive = useRef(false);
+  const podAccessActive = useRef(false);
   const previousLanguageRef = useRef(language);
 
   useEffect(() => {
@@ -571,7 +561,7 @@ export default function App({
   }, [createGeneratedDraft]);
 
   const activateLocalMode = useCallback((identityWebId: string | null = null) => {
-    demoPodAccessActive.current = false;
+    podAccessActive.current = false;
     completionOperationRevision.current += 1;
     setCompletionInProgress(null);
     setCompleteConfirmation(null);
@@ -589,7 +579,7 @@ export default function App({
 
   const applyAuth = useCallback(async (auth: BridgeState, fetcher?: SolidFetch) => {
     const revision = ++authRevision.current;
-    demoPodAccessActive.current = false;
+    podAccessActive.current = false;
     const authenticated = Boolean(auth.isLoggedIn && auth.webId);
     setIsAuthenticated(authenticated);
     setAuthenticatedWebId(authenticated ? auth.webId : null);
@@ -601,14 +591,20 @@ export default function App({
     setCompleteConfirmation(null);
     setDeleteConfirmation(null);
 
-    if (
-      !authenticated ||
-      !auth.webId ||
-      !fetcher ||
-      !demoConfiguration.webId ||
-      storageModeForIdentity(auth.webId, demoConfiguration.webId) !== "demo-pod"
-    ) {
+    if (!authenticated || !auth.webId) {
       activateLocalMode(auth.webId);
+      setLoading(false);
+      return;
+    }
+    // Never expose or mutate another identity's previous state while a new Pod
+    // is resolving. Authenticated sessions fail closed instead of silently
+    // switching to browser-local storage.
+    setWebId(null);
+    setSolidFetch(null);
+    setPodRoot(null);
+    activateState({ ...EMPTY_STATE, drafts: [], activities: [] });
+    if (!fetcher || storageModeForIdentity(auth.webId) !== "solid-pod") {
+      setError("Die authentifizierte Solid-WebID ist ungültig.");
       setLoading(false);
       return;
     }
@@ -621,19 +617,18 @@ export default function App({
       if (revision !== authRevision.current) return;
       const stored = await loadState(root, fetcher);
       if (revision !== authRevision.current) return;
-      demoPodAccessActive.current = true;
+      podAccessActive.current = true;
       setWebId(auth.webId);
       setSolidFetch(() => fetcher);
       setPodRoot(root);
       activateState(stored);
     } catch (reason) {
       if (revision !== authRevision.current) return;
-      activateLocalMode(auth.webId);
       setError(reason instanceof Error ? reason.message : "Solid Tours konnte nicht geladen werden.");
     } finally {
       if (revision === authRevision.current) setLoading(false);
     }
-  }, [activateLocalMode, activateState, demoConfiguration.webId]);
+  }, [activateLocalMode, activateState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -746,7 +741,7 @@ export default function App({
       cancelled = true;
       authRevision.current += 1;
       completionOperationRevision.current += 1;
-      demoPodAccessActive.current = false;
+      podAccessActive.current = false;
       unsubscribe?.();
     };
   }, [applyAuth, embedded, injectedSession, injectedSessionFetch, webIdOverride]);
@@ -771,13 +766,12 @@ export default function App({
     }
   };
 
-  const demoPodConnected = Boolean(
-    demoPodAccessActive.current &&
+  const podConnected = Boolean(
+    podAccessActive.current &&
       webId &&
       solidFetch &&
       podRoot &&
-      demoConfiguration.webId &&
-      hasDemoPodAccess(webId, demoConfiguration.webId)
+      hasSolidPodAccess(webId)
   );
   const renderedAuthRevision = authRevision.current;
   const assertCurrentAuthContext = () => {
@@ -791,10 +785,13 @@ export default function App({
     baseState: ToursState = state
   ) => {
     assertCurrentAuthContext();
-    if (demoPodConnected && podRoot && solidFetch && webId) {
+    if (podConnected && podRoot && solidFetch && webId) {
       await saveState(podRoot, next, baseState, webId, solidFetch);
       assertCurrentAuthContext();
       return;
+    }
+    if (isAuthenticated) {
+      throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
     }
     saveLocalToursStateForIdentity(
       { ...next, activeRun: null },
@@ -884,7 +881,7 @@ export default function App({
     const normalized = { ...candidate, name: candidate.name.trim(), updatedAt: new Date().toISOString() };
     const previousDraft = state.drafts.find((item) => item.id === normalized.id) || null;
     let writtenDraft: { etag: string } | null = null;
-    if (demoPodConnected && podRoot && solidFetch && webId) {
+    if (podConnected && podRoot && solidFetch && webId) {
       const previousSnapshot = previousDraft
         ? await loadDraftMasterSnapshot(podRoot, previousDraft, solidFetch)
         : null;
@@ -899,12 +896,12 @@ export default function App({
     }
     const next: ToursState = {
       ...state,
-      activeRun: demoPodConnected ? state.activeRun : null,
+      activeRun: podConnected ? state.activeRun : null,
       drafts: [normalized, ...state.drafts.filter((item) => item.id !== normalized.id)],
     };
     let stateCommitted = false;
     try {
-      if (demoPodConnected && podRoot && solidFetch && webId) {
+      if (podConnected && podRoot && solidFetch && webId) {
         assertCurrentAuthContext();
         await saveState(podRoot, next, state, webId, solidFetch);
         stateCommitted = true;
@@ -974,7 +971,7 @@ export default function App({
         const storedDraft = stateWithDraft.drafts.find((item) => item.id === draft.id) || draft;
         const activity = completeTour(storedDraft, completionDate, activityType);
         let writtenActivity: { etag: string } | null = null;
-        if (demoPodConnected && podRoot && solidFetch && webId) {
+        if (podConnected && podRoot && solidFetch && webId) {
           await saveInterestsIfMissing(podRoot, webId, solidFetch);
           assertCurrentAuthContext();
           writtenActivity = await saveActivityConditionally(podRoot, activity, webId, solidFetch);
@@ -985,7 +982,7 @@ export default function App({
         };
         let stateCommitted = false;
         try {
-          if (demoPodConnected && podRoot && solidFetch && webId) {
+          if (podConnected && podRoot && solidFetch && webId) {
             assertCurrentAuthContext();
             await saveState(podRoot, next, stateWithDraft, webId, solidFetch);
             stateCommitted = true;
@@ -1097,7 +1094,7 @@ export default function App({
 
   const publishActivities = async (baseState: ToursState): Promise<ToursState> => {
       assertCurrentAuthContext();
-      if (!demoPodConnected || !podRoot || !solidFetch || !webId) {
+      if (!podConnected || !podRoot || !solidFetch || !webId) {
         throw new Error("Restricted Publish ist für dieses Konto nicht verfügbar.");
       }
       if (baseState.activeRun) throw new Error("Setze zuerst den aktiven Szenariolauf zurück.");
@@ -1321,7 +1318,7 @@ export default function App({
 
   const resetActiveRun = async (activeRun: ActiveRun): Promise<void> => {
       assertCurrentAuthContext();
-      if (!demoPodConnected || !podRoot || !solidFetch || !webId) {
+      if (!podConnected || !podRoot || !solidFetch || !webId) {
         throw new Error("Der aktive Szenariolauf kann ohne die verbundene Solid-Pod-Sitzung nicht zurueckgesetzt werden.");
       }
       activeRun = validateActiveRun(podRoot, activeRun);
@@ -1468,7 +1465,7 @@ export default function App({
 
   const resetScenario = () =>
     mutate(async () => {
-      if (!demoPodConnected || !podRoot || !solidFetch || !webId || !state.activeRun) return;
+      if (!podConnected || !podRoot || !solidFetch || !webId || !state.activeRun) return;
       await resetActiveRun(validateActiveRun(podRoot, state.activeRun));
     });
 
@@ -1502,7 +1499,7 @@ export default function App({
     }
     void mutate(async () => {
       assertCurrentAuthContext();
-      if (demoPodConnected && podRoot && solidFetch && webId) {
+      if (podConnected && podRoot && solidFetch && webId) {
         const remoteSnapshot = await loadStateSnapshot(podRoot, solidFetch);
         assertCurrentAuthContext();
         const remoteDraft = remoteSnapshot.state.drafts.find(
@@ -1611,7 +1608,7 @@ export default function App({
     }
     void mutate(async () => {
       assertCurrentAuthContext();
-      if (!demoPodConnected || !podRoot || !solidFetch || !webId) {
+      if (!podConnected || !podRoot || !solidFetch || !webId) {
         const next = {
           ...state,
           activeRun: null,
@@ -1632,7 +1629,7 @@ export default function App({
       const assertOperationIdentity = () => {
         if (
           operationRevision !== authRevision.current ||
-          !demoPodAccessActive.current
+          !podAccessActive.current
         ) {
           throw new Error(
             "Die Solid-Sitzung hat sich während des Löschens geändert. Der Vorgang wurde sicher abgebrochen."
@@ -1835,7 +1832,7 @@ export default function App({
         );
       }
 
-      if (operationRevision !== authRevision.current || !demoPodAccessActive.current) {
+      if (operationRevision !== authRevision.current || !podAccessActive.current) {
         throw new Error(
           "Die Solid-Sitzung hat sich während des Löschens geändert. Die sichere Remote-Löschung wurde abgeschlossen."
         );
@@ -1965,10 +1962,7 @@ export default function App({
 
   const mapRoutes = state.drafts.filter((item) => item.id !== draft.id);
   const editablePointCount = draft.geometry.reduce((count, line) => count + line.length, 0);
-  const visibleError = localizeUserFacingMessage(
-    error || (!demoErrorDismissed ? demoConfiguration.error : null),
-    language
-  );
+  const visibleError = localizeUserFacingMessage(error, language);
 
   return (
     <div
@@ -2146,7 +2140,7 @@ export default function App({
                     </article>
                   ))}
                 </div>
-                {demoPodConnected && state.activities.length > 0 && (
+                {podConnected && state.activities.length > 0 && (
                   <div className="health-donation-actions">
                     {state.activeRun ? (
                       <button className="danger" disabled={busy} onClick={resetScenario}>
@@ -2185,7 +2179,6 @@ export default function App({
                   title={t("closeError")}
                   onClick={() => {
                     setError(null);
-                    setDemoErrorDismissed(true);
                   }}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">

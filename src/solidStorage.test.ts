@@ -9,9 +9,11 @@ vi.mock("./ownerAcl", () => ownerAclMocks);
 
 import {
   GENERIC_INTERESTS,
+  deriveCssPodRoot,
   loadDraftMasterSnapshot,
   loadStateSnapshot,
   PrivateResourceConflictError,
+  resolvePodRoot,
   saveDraftConditionally,
   saveState,
   saveStateIfUnchanged,
@@ -35,6 +37,76 @@ describe("private Pod layout", () => {
     const urls = storageUrls("https://pod.example/laura/");
     expect(Object.values(urls).every((url) => url.startsWith("https://pod.example/laura/solid-tours/"))).toBe(true);
     expect(Object.keys(urls).some((key) => key.toLowerCase().includes("health"))).toBe(false);
+  });
+
+  it("derives only unambiguous CSS profile/card Pod roots", () => {
+    expect(
+      deriveCssPodRoot("https://id.example/users/alice/profile/card#me")
+    ).toBe("https://id.example/users/alice/");
+    expect(deriveCssPodRoot("https://id.example/profile/card#me")).toBe(
+      "https://id.example/"
+    );
+    expect(() =>
+      deriveCssPodRoot("https://id.example/users/alice#me")
+    ).toThrow(/private Solid Pod/);
+    expect(() =>
+      deriveCssPodRoot("https://id.example/users/bob/profile#me")
+    ).toThrow(/private Solid Pod/);
+  });
+
+  it("uses a discovered external Pod root instead of deriving it from the WebID", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const resolver = vi
+      .fn()
+      .mockResolvedValue(["https://storage.example/alice"]);
+
+    await expect(
+      resolvePodRoot("https://identity.example/alice#me", fetcher, resolver)
+    ).resolves.toBe("https://storage.example/alice/");
+    expect(resolver).toHaveBeenCalledWith(
+      "https://identity.example/alice#me",
+      { fetch: fetcher }
+    );
+  });
+
+  it("fails closed when Pod discovery fails instead of guessing a CSS path", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const resolver = vi.fn().mockRejectedValue(new Error("profile unavailable"));
+
+    await expect(
+      resolvePodRoot(
+        "https://identity.example/alice/profile/card#me",
+        fetcher,
+        resolver
+      )
+    ).rejects.toThrow(/private Solid Pod/);
+  });
+
+  it("accepts the CSS fallback only after successful discovery without storage links", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const resolver = vi.fn().mockResolvedValue([]);
+
+    await expect(
+      resolvePodRoot(
+        "https://identity.example/alice/profile/card#me",
+        fetcher,
+        resolver
+      )
+    ).resolves.toBe("https://identity.example/alice/");
+    await expect(
+      resolvePodRoot("https://identity.example/alice#me", fetcher, resolver)
+    ).rejects.toThrow(/private Solid Pod/);
+  });
+
+  it("rejects unsafe Pod roots returned by profile discovery", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const resolver = vi
+      .fn()
+      .mockResolvedValue(["https://user:secret@storage.example/alice/"]);
+
+    await expect(
+      resolvePodRoot("https://identity.example/alice#me", fetcher, resolver)
+    ).rejects.toThrow(/private Solid Pod/);
   });
 
   it("creates a private run manifest that points only to the GeoJSON snapshot", () => {

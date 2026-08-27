@@ -12,7 +12,6 @@ import {
   getUrl,
   getUrlAll,
 } from "@inrupt/solid-client";
-import { DEFAULT_DEMO_WEB_ID } from "./demoAccess";
 
 type SolidFetch = typeof fetch;
 
@@ -25,22 +24,6 @@ const catalogSession = (webId: string, fetcher: SolidFetch): CatalogSession => (
   info: { isLoggedIn: true, webId },
   fetch: fetcher,
 });
-
-const catalogPodRootForWebId = (webId: string): string => {
-  const url = new URL(webId);
-  const segments = url.pathname.split("/").filter(Boolean);
-  const profileIndex = segments.indexOf("profile");
-  const baseSegments = profileIndex > -1 ? segments.slice(0, profileIndex) : segments;
-  return `${url.origin}${baseSegments.length ? `/${baseSegments.join("/")}/` : "/"}`;
-};
-
-const assertCatalogPodRoot = (podRoot: string | undefined, webId: string): void => {
-  if (!podRoot) return;
-  const normalizedPodRoot = podRoot.endsWith("/") ? podRoot : `${podRoot}/`;
-  if (normalizedPodRoot !== catalogPodRootForWebId(webId)) {
-    throw new Error("Katalog- und Storage-Pod-Root stimmen nicht ueberein.");
-  }
-};
 
 const FOAF_NAME = "http://xmlns.com/foaf/0.1/name";
 const VCARD_FN = "http://www.w3.org/2006/vcard/ns#fn";
@@ -111,9 +94,7 @@ export async function loadCatalogProfileMetadata(
   webId: string,
   fetcher: SolidFetch
 ): Promise<CatalogProfileMetadata> {
-  const fallback = {
-    publisher: webId === DEFAULT_DEMO_WEB_ID ? "Hannah Müller" : "Solid Pod User",
-  };
+  const fallback = { publisher: "Solid Pod User" };
   try {
     const profileDataset = await getSolidDataset(webId.split("#")[0], { fetch: fetcher });
     const profile =
@@ -162,23 +143,39 @@ export async function publishCatalogEntry({
   resourceUrl: string;
   fetcher: SolidFetch;
 }): Promise<CatalogPublication> {
-  assertCatalogPodRoot(podRoot, webId);
   const datasetIdentifier = `solid-tours-activity-${scenarioRunId}`;
   const profile = await loadCatalogProfileMetadata(webId, fetcher);
-  const result = await publishRestrictedDataset(catalogSession(webId, fetcher), {
-    identifier: datasetIdentifier,
-    title: "Completed tours health-data donation",
-    description:
-      "Restricted Solid Tours routes with their derived activity summaries.",
-    distributionUrl: resourceUrl,
-    mediaType: "application/geo+json",
-    publisher: profile.publisher,
-    publisherWebId: webId,
-    contactPoint: profile.contactEmail,
-    creatorWebId: webId,
-    includeCreator: true,
-    theme: "mobility",
-  });
+  let result: Awaited<ReturnType<typeof publishRestrictedDataset>>;
+  try {
+    result = await publishRestrictedDataset(catalogSession(webId, fetcher), {
+      // Newer Catalog API versions can use the resolved storage root directly.
+      // Older versions ignore this extension, but Solid Tours no longer rejects
+      // valid WebID/Pod layouts before giving the Catalog API a chance to work.
+      podRoot,
+      identifier: datasetIdentifier,
+      title: "Completed tours health-data donation",
+      description:
+        "Restricted Solid Tours routes with their derived activity summaries.",
+      distributionUrl: resourceUrl,
+      mediaType: "application/geo+json",
+      publisher: profile.publisher,
+      publisherWebId: webId,
+      contactPoint: profile.contactEmail,
+      creatorWebId: webId,
+      includeCreator: true,
+      theme: "mobility",
+      // The worker discovers donors through Dataspace registries. Publishing
+      // without one would create an apparently successful but unreachable run.
+      requireDiscoverableRegistry: true,
+    });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "discoverable-registry-required") {
+      throw new Error(
+        "Für die Gesundheitsdatenspende muss im Solid-Profil eine öffentliche Dataspace-Registry konfiguriert sein."
+      );
+    }
+    throw error;
+  }
   return {
     datasetIdentifier,
     catalogDatasetUrl: result.datasetUrl,
@@ -199,9 +196,9 @@ export async function removeCatalogEntry({
   catalogDatasetUrl?: string;
   fetcher: SolidFetch;
 }): Promise<void> {
-  assertCatalogPodRoot(podRoot, webId);
   await removeDataset(catalogSession(webId, fetcher), {
     identifier: datasetIdentifier,
     datasetUrl: catalogDatasetUrl,
+    podRoot,
   });
 }

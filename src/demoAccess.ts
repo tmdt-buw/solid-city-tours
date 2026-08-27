@@ -1,5 +1,14 @@
+import {
+  hasSolidPodAccess,
+  storageModeForIdentity as storageModeForAuthenticatedIdentity,
+  type ToursStorageMode,
+} from "./storageMode";
+
 export const DEFAULT_DEMO_WEB_ID =
   "https://solid-community-server.tmdt.info/sscon/profile/card#me";
+
+export { hasSolidPodAccess };
+export type { ToursStorageMode };
 
 export type SolidToursRuntimeConfig = {
   demoWebId?: unknown;
@@ -60,16 +69,15 @@ export function resolveDemoWebId(
 
 export function hasDemoPodAccess(
   authenticatedWebId: string | null | undefined,
-  configuredDemoWebId: string
+  _configuredDemoWebId: string
 ): boolean {
-  return authenticatedWebId === configuredDemoWebId;
+  return hasSolidPodAccess(authenticatedWebId);
 }
 
-export type ToursStorageMode = "local" | "demo-pod";
-
+/** @deprecated Use storageModeForIdentity from ./storageMode. */
 export function storageModeForIdentity(
   authenticatedWebId: string | null | undefined,
-  configuredDemoWebId: string
+  _configuredDemoWebId?: string
 ): ToursStorageMode {
-  return hasDemoPodAccess(authenticatedWebId, configuredDemoWebId) ? "demo-pod" : "local";
+  return storageModeForAuthenticatedIdentity(authenticatedWebId);
 }
