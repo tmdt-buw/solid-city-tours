@@ -20,7 +20,13 @@ describe("Solid Tours embed styles", () => {
       .flatMap((selector) => selector.split(",").map((part) => part.trim()));
 
     expect(selectors.length).toBeGreaterThan(0);
-    expect(selectors.every((selector) => selector.startsWith(".solid-tours-app"))).toBe(true);
+    expect(
+      selectors.every(
+        (selector) =>
+          selector.startsWith(".solid-tours-app") ||
+          selector.startsWith(".browser-safari .solid-tours-app")
+      )
+    ).toBe(true);
   });
 
   it("keeps the Manager embed inside its viewport while retaining planner scrolling", () => {
@@ -30,22 +36,33 @@ describe("Solid Tours embed styles", () => {
       /\.solid-tours-app--embedded \.route-workspace\s*\{[^}]*height:\s*calc\(var\(--dataspace-scaled-vh, 100vh\) - 230px\)/s
     );
     expect(css).toMatch(
-      /\.solid-tours-app--embedded:not\(\.solid-tours-app--modal-open\)\s*\{[^}]*overflow:\s*clip/s
+      /\.solid-tours-app--embedded:not\(\.solid-tours-app--modal-open\)\s*\{[^}]*overflow:\s*hidden[^}]*overflow:\s*clip/s
     );
     expect(css).toMatch(
       /\.solid-tours-app \.planner-scroll\s*\{[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s
     );
   });
 
-  it("uses the stack's desktop scale only for the standalone application", () => {
+  it("keeps zoom for other browsers and disables it only for Safari standalone roots", () => {
     const css = readFileSync(resolve(process.cwd(), "src/App.css"), "utf8").replace(
       /\/\*[\s\S]*?\*\//g,
       ""
     );
+    const loginCss = readFileSync(
+      resolve(process.cwd(), "src/StandaloneLogin.css"),
+      "utf8"
+    ).replace(/\/\*[\s\S]*?\*\//g, "");
+    const standaloneCss = readFileSync(
+      resolve(process.cwd(), "src/standalone.css"),
+      "utf8"
+    ).replace(/\/\*[\s\S]*?\*\//g, "");
 
     expect(css).toMatch(/@media\s*\(min-width:\s*900px\)/);
     expect(css).toMatch(
-      /\.solid-tours-app--standalone\s*\{[^}]*--solid-tours-standalone-scale:\s*\.7[^}]*--dataspace-scaled-vw:\s*calc\(100vw\s*\/\s*var\(--solid-tours-standalone-scale\)\)[^}]*--dataspace-scaled-vh:\s*calc\(100dvh\s*\/\s*var\(--solid-tours-standalone-scale\)\)[^}]*height:\s*var\(--dataspace-scaled-vh\)[^}]*zoom:\s*var\(--solid-tours-standalone-scale\)/s
+      /\.solid-tours-app--standalone\s*\{[^}]*--solid-tours-standalone-scale:\s*\.7[^}]*--dataspace-scaled-vw:\s*calc\(100vw\s*\/\s*var\(--solid-tours-standalone-scale\)\)[^}]*--dataspace-scaled-vh:\s*calc\(100vh\s*\/\s*var\(--solid-tours-standalone-scale\)\)[^}]*--dataspace-scaled-vh:\s*calc\(100dvh\s*\/\s*var\(--solid-tours-standalone-scale\)\)[^}]*width:\s*var\(--dataspace-scaled-vw\)[^}]*height:\s*var\(--dataspace-scaled-vh\)[^}]*zoom:\s*var\(--solid-tours-standalone-scale\)/s
+    );
+    expect(css).toMatch(
+      /\.browser-safari \.solid-tours-app--standalone\s*\{[^}]*--dataspace-scaled-vw:\s*100vw[^}]*--dataspace-scaled-vh:\s*100vh[^}]*--dataspace-scaled-vh:\s*100dvh[^}]*width:\s*100vw[^}]*height:\s*100vh[^}]*height:\s*100dvh[^}]*zoom:\s*normal/s
     );
     expect(css).toMatch(
       /\.solid-tours-app--standalone\.solid-tours-app--loading,\s*\.solid-tours-app--standalone \.tours-loading\s*\{[^}]*min-height:\s*var\(--dataspace-scaled-vh\)/s
@@ -57,6 +74,25 @@ describe("Solid Tours embed styles", () => {
     expect(embeddedDeclarations.length).toBeGreaterThan(0);
     expect(embeddedDeclarations.every((declarations) => !/\bzoom\s*:/.test(declarations))).toBe(
       true
+    );
+    expect(css).not.toMatch(
+      /(?:\.solid-tours-app--standalone|\.browser-safari \.solid-tours-app--standalone)\s*\{[^}]*transform:\s*scale\(/s
+    );
+    expect(loginCss).not.toMatch(
+      /(?:\.solid-tours-login|\.browser-safari \.solid-tours-login)\s*\{[^}]*transform:\s*scale\(/s
+    );
+    expect(standaloneCss).not.toMatch(/(^|[;{]\s*)zoom\s*:/m);
+    expect(loginCss).toMatch(
+      /\.solid-tours-login\s*\{[^}]*--solid-tours-login-layout-height:\s*100vh[^}]*--solid-tours-login-layout-height:\s*100dvh/s
+    );
+    expect(loginCss).toMatch(
+      /\.solid-tours-login\s*\{[^}]*--solid-tours-login-scale:\s*\.7[^}]*--solid-tours-login-layout-width:\s*calc\(100vw\s*\/\s*var\(--solid-tours-login-scale\)\)[^}]*--solid-tours-login-layout-height:\s*calc\(100vh\s*\/\s*var\(--solid-tours-login-scale\)\)[^}]*--solid-tours-login-layout-height:\s*calc\(100dvh\s*\/\s*var\(--solid-tours-login-scale\)\)[^}]*width:\s*var\(--solid-tours-login-layout-width\)[^}]*min-height:\s*var\(--solid-tours-login-layout-height\)[^}]*zoom:\s*var\(--solid-tours-login-scale\)/s
+    );
+    expect(loginCss).toMatch(
+      /\.browser-safari \.solid-tours-login\s*\{[^}]*--solid-tours-login-layout-width:\s*100vw[^}]*--solid-tours-login-layout-height:\s*100vh[^}]*--solid-tours-login-layout-height:\s*100dvh[^}]*width:\s*100vw[^}]*height:\s*100vh[^}]*height:\s*100dvh[^}]*min-height:\s*100vh[^}]*min-height:\s*100dvh[^}]*padding:\s*0 20px[^}]*overflow-y:\s*auto[^}]*zoom:\s*normal/s
+    );
+    expect(standaloneCss).toMatch(
+      /@media\s*\(min-width:\s*900px\)\s*\{[\s\S]*html,\s*body,\s*#root\s*\{[^}]*height:\s*var\(--solid-tours-viewport-height\)[^}]*overflow:\s*hidden/s
     );
   });
 

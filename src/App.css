@@ -42,10 +42,10 @@
 .solid-tours-app p { color: var(--muted); line-height: 1.5; }
 .solid-tours-app .eyebrow { display: block; margin-bottom: 5px; color: var(--blue); font-size: .68rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
 
-.solid-tours-app--loading { min-height: 100vh; }
-.solid-tours-app--standalone { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.solid-tours-app--embedded:not(.solid-tours-app--modal-open) { overflow: clip; }
-.solid-tours-app .tours-loading { min-height: 100vh; display: grid; place-items: center; margin: 0; color: #64748b; background: var(--soft); font-weight: 700; }
+.solid-tours-app--loading { min-height: 100vh; min-height: 100dvh; }
+.solid-tours-app--standalone { height: 100vh; height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.solid-tours-app--embedded:not(.solid-tours-app--modal-open) { overflow: hidden; overflow: clip; }
+.solid-tours-app .tours-loading { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; margin: 0; color: #64748b; background: var(--soft); font-weight: 700; }
 .solid-tours-app--embedded.solid-tours-app--loading,
 .solid-tours-app--embedded .tours-loading { min-height: calc(var(--dataspace-scaled-vh, 100vh) - 230px); background: #fff; }
 
@@ -53,9 +53,21 @@
   .solid-tours-app--standalone {
     --solid-tours-standalone-scale: .7;
     --dataspace-scaled-vw: calc(100vw / var(--solid-tours-standalone-scale));
+    --dataspace-scaled-vh: calc(100vh / var(--solid-tours-standalone-scale));
     --dataspace-scaled-vh: calc(100dvh / var(--solid-tours-standalone-scale));
+    width: var(--dataspace-scaled-vw);
     height: var(--dataspace-scaled-vh);
     zoom: var(--solid-tours-standalone-scale);
+  }
+
+  .browser-safari .solid-tours-app--standalone {
+    --dataspace-scaled-vw: 100vw;
+    --dataspace-scaled-vh: 100vh;
+    --dataspace-scaled-vh: 100dvh;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    zoom: normal;
   }
 
   .solid-tours-app--standalone.solid-tours-app--loading,

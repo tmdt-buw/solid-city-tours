@@ -1,0 +1,37 @@
+:root {
+  --solid-tours-viewport-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --solid-tours-viewport-height: 100dvh;
+  }
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--solid-tours-viewport-height);
+}
+
+@media (min-width: 900px) {
+  html,
+  body,
+  #root {
+    height: var(--solid-tours-viewport-height);
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+html.browser-safari,
+html.browser-safari body,
+html.browser-safari #root {
+  width: 100%;
+  height: var(--solid-tours-viewport-height);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}

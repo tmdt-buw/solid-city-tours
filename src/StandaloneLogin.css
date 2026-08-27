@@ -2,8 +2,10 @@
   --login-ink: #0f172a;
   --login-muted: #64748b;
   --login-line: #dbe3f3;
+  --solid-tours-login-layout-height: 100vh;
+  --solid-tours-login-layout-height: 100dvh;
   box-sizing: border-box;
-  min-height: 100vh;
+  min-height: var(--solid-tours-login-layout-height);
   width: 100%;
   display: flex;
   align-items: flex-start;
@@ -30,7 +32,7 @@
 
 .solid-tours-login .solid-tours-login__stage {
   box-sizing: content-box;
-  min-height: calc(100vh - 32px);
+  min-height: calc(var(--solid-tours-login-layout-height, 100vh) - 32px);
   width: 100%;
   display: grid;
   place-items: center;
@@ -39,8 +41,27 @@
 
 @media (min-width: 900px) {
   .solid-tours-login {
-    min-height: calc(100vh / 0.7);
-    zoom: 0.7;
+    --solid-tours-login-scale: .7;
+    --solid-tours-login-layout-width: calc(100vw / var(--solid-tours-login-scale));
+    --solid-tours-login-layout-height: calc(100vh / var(--solid-tours-login-scale));
+    --solid-tours-login-layout-height: calc(100dvh / var(--solid-tours-login-scale));
+    width: var(--solid-tours-login-layout-width);
+    min-height: var(--solid-tours-login-layout-height);
+    zoom: var(--solid-tours-login-scale);
+  }
+
+  .browser-safari .solid-tours-login {
+    --solid-tours-login-layout-width: 100vw;
+    --solid-tours-login-layout-height: 100vh;
+    --solid-tours-login-layout-height: 100dvh;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 0 20px;
+    overflow-y: auto;
+    zoom: normal;
   }
 }
 
