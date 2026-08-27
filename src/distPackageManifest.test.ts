@@ -8,6 +8,7 @@ describe("library package manifest", () => {
         name: "@example/solid-tours",
         version: "1.2.3",
         license: "Apache-2.0",
+        publishConfig: { registry: "https://npm.pkg.github.com" },
         peerDependencies: { react: "^18", "react-dom": "^18" },
         dependencies: {
           "@hoelk-f/semantic-data-catalog": "0.8.62",
@@ -16,6 +17,8 @@ describe("library package manifest", () => {
           "@inrupt/solid-client-authn-browser": "2.3.0",
           "@inrupt/solid-client-authn-core": "2.3.0",
           leaflet: "^1.9.4",
+          react: "18.3.1",
+          "react-dom": "18.3.1",
           "build-only-package": "9.9.9",
         },
       })
@@ -30,8 +33,11 @@ describe("library package manifest", () => {
         "./embed": { import: "./index.js", require: "./index.cjs" },
         "./embed.css": "./embed.css",
       },
+      publishConfig: { registry: "https://npm.pkg.github.com" },
     });
     expect(manifest.dependencies).not.toHaveProperty("build-only-package");
+    expect(manifest.dependencies).not.toHaveProperty("react");
+    expect(manifest.dependencies).not.toHaveProperty("react-dom");
     expect(manifest.dependencies).not.toHaveProperty("react-leaflet");
     expect(manifest.dependencies).toMatchObject({
       "@inrupt/oidc-client-ext": "2.3.0",

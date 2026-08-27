@@ -4,6 +4,7 @@ type SourcePackage = {
   name: string;
   version: string;
   license: string;
+  publishConfig?: Record<string, string>;
   dependencies: Record<string, string>;
   peerDependencies: Record<string, string>;
 };
@@ -21,6 +22,7 @@ export function createDistPackageManifest(source: SourcePackage): string {
       "./embed.css": "./embed.css",
     },
     sideEffects: ["**/*.css"],
+    publishConfig: source.publishConfig,
     peerDependencies: source.peerDependencies,
     dependencies: {
       "@hoelk-f/semantic-data-catalog":

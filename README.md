@@ -72,16 +72,12 @@ Three real Wuppertal GeoJSON tracks for testing the importer are available in
 their source, `© OpenStreetMap contributors` attribution and ODbL 1.0 license are documented in
 that directory and embedded in every file.
 
-The Catalog SDK dependency is pinned to `0.8.62` because that version supports privacy-safe Catalog
-publication without exposing the owner's WebID. At the time this repository was created, `0.8.62`
-was built locally but not yet available from GitHub Packages. Therefore `package-lock.json` still
-records the last published `0.8.61`; it must not be replaced with a machine-specific `file:` lock.
-Local stack development links the sibling Catalog `dist` package directly and is testable now.
+The Catalog SDK dependency is pinned to `0.8.63` for privacy-safe restricted Catalog publication.
+Local stack development can link the sibling Catalog `dist` package directly without changing the
+registry-based lockfile.
 
-Release order: publish Catalog `0.8.62`, run an authenticated `npm install` in this repository and
-verify that both the root lock entry and resolved Catalog package say `0.8.62`; only then publish
-Solid Tours or switch release builds back from `npm install` to `npm ci`.
-
-The checked-in CI workflow tests and builds on pushes and pull requests and verifies a Docker image
-with `push: false`. It does not publish npm packages, push images or dispatch Manager releases.
-Those external release effects require a separately authorized manual release operation.
+The CI workflow verifies tests and builds for pushes and pull requests. A push to `main` additionally
+publishes the generated `dist` package to GitHub Packages, pushes the versioned and `latest` Docker
+images, and dispatches a Dataspace Manager rebuild. Publishing `dist` is intentional: its generated
+manifest keeps React and ReactDOM as peer dependencies so an embedded Solid Tours instance reuses
+the Manager's single React runtime.
