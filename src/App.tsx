@@ -9,10 +9,25 @@ import "./App.css";
 import FontAwesomeIcon from "./FontAwesomeIcon";
 import {
   catalogPublicationReference,
+  discoverCatalogedRoutes,
+  ensureRouteCatalogReadiness,
+  getCatalogedRouteDiscoveryReport,
+  loadCatalogProfileMetadata,
+  loadPublicRegistryOptions,
+  loadRouteCatalogReadiness,
   publishCatalogEntry,
+  publishRouteTemplateCatalogEntry,
+  updateRouteTemplateCatalogEntry,
+  saveCatalogProfileMetadata,
+  type CatalogProfileMetadata,
+  type PublicRegistryOption,
   removeCatalogEntry,
 } from "./catalog";
-import { revokeAndArchiveScenarioAccess } from "./accessRequests";
+import {
+  ensureSolidToursInbox,
+  getSolidToursInboxReadiness,
+  revokeAndArchiveScenarioAccess,
+} from "./accessRequests";
 import {
   completeTour,
   createId,
@@ -41,6 +56,9 @@ import {
   isStateConflictError,
   loadActivityMasterSnapshot,
   loadDraftMasterSnapshot,
+  loadDraftMasterResourceSnapshot,
+  loadPublicRouteTemplateResourceSnapshot,
+  loadSolidToursOnboarding,
   loadState,
   loadStateSnapshot,
   resolvePodRoot,
@@ -50,11 +68,15 @@ import {
   saveActivityConditionally,
   saveDraftConditionally,
   saveInterestsIfMissing,
+  savePublicRouteTemplate,
+  updatePublicRouteTemplateConditionally,
   saveRunSnapshot,
+  saveSolidToursOnboarding,
   saveState,
   saveStateIfUnchanged,
   storageUrls,
   type StateSnapshot,
+  type PublicRouteTemplateUpdateResult,
   writePublishedMarker,
 } from "./solidStorage";
 import type {
@@ -67,10 +89,24 @@ import type {
   TourDraft,
   ToursState,
 } from "./types";
+import type { RouteCatalogPublication } from "./types";
+import {
+  adoptCatalogedRoute,
+  availableCatalogedRoutes,
+  createRouteTemplateSnapshot,
+  isDraftEligibleForCatalogPublication,
+  type CatalogedRoute,
+} from "./routeTemplates";
 import { validateActiveRun } from "./stateValidation";
 import { initializeOnce } from "./mapLifecycle";
 import StandaloneLogin from "./StandaloneLogin";
 import LanguageToggle from "./LanguageToggle";
+import SolidToursOnboarding from "./SolidToursOnboarding";
+import {
+  completeOnboardingRecord,
+  onboardingCompleteFor,
+  type SolidToursOnboardingRecord,
+} from "./appOnboarding";
 import {
   DEFAULT_TOURS_LANGUAGE,
   localizeUserFacingMessage,
@@ -93,10 +129,14 @@ const AUTH_BRIDGE_KEY = "__SOLID_DATASPACE_AUTH__";
 const DEFAULT_ISSUER = "https://solid-community-server.tmdt.info";
 const WUPPERTAL: LatLngExpression = [51.2562, 7.1508];
 const RECOVERY_STATE_CAS_ATTEMPTS = 3;
+const CATALOG_PUBLICATION_LEASE_MS = 15 * 60 * 1000;
 type BridgeState = { isLoggedIn: boolean; webId: string | null };
 type DeleteConfirmation =
   | { kind: "draft"; item: TourDraft }
   | { kind: "activity"; item: CompletedActivity; donationReplacement: boolean };
+type CatalogConfirmation =
+  | { kind: "index"; drafts: TourDraft[] }
+  | { kind: "remove"; draft: TourDraft; publication: RouteCatalogPublication };
 type HostAuthBridge = {
   isReady?: boolean;
   getState: () => BridgeState;
@@ -231,17 +271,50 @@ const newDraft = (language: ToursLanguage = DEFAULT_TOURS_LANGUAGE): TourDraft =
   };
 };
 
+const cloneDraft = (draft: TourDraft): TourDraft => ({
+  ...draft,
+  geometry: draft.geometry.map((line) =>
+    line.map(([longitude, latitude]) => [longitude, latitude])
+  ),
+});
+
+const sameDraftContent = (left: TourDraft, right: TourDraft): boolean =>
+  left.name === right.name &&
+  left.routeSource === right.routeSource &&
+  left.durationMinutes === right.durationMinutes &&
+  left.durationSource === right.durationSource &&
+  JSON.stringify(left.geometry) === JSON.stringify(right.geometry);
+
+const sameStoredDraft = (left: TourDraft, right: TourDraft): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const samePendingUpdate = (
+  publication: RouteCatalogPublication,
+  operationId: string,
+  leaseId: string,
+  draft: TourDraft
+): boolean =>
+  publication.pendingUpdate?.operationId === operationId &&
+  publication.pendingUpdate.leaseId === leaseId &&
+  sameStoredDraft(publication.pendingUpdate.draft, draft);
+
 const position = ([longitude, latitude]: Coordinate): LatLngExpression => [latitude, longitude];
 
 function TourMap({
   geometry,
   savedRoutes,
+  catalogPreview,
+  editable,
   onPoint,
+  onSelectRoute,
   language,
 }: {
   geometry: MultiLineCoordinates;
   savedRoutes: TourDraft[];
+  catalogPreview: CatalogedRoute | null;
+  editable: boolean;
   onPoint: (point: Coordinate) => void;
+  onSelectRoute: (draftId: string) => void;
   language: ToursLanguage;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -253,6 +326,10 @@ function TourMap({
   languageRef.current = language;
   const onPointRef = useRef(onPoint);
   onPointRef.current = onPoint;
+  const onSelectRouteRef = useRef(onSelectRoute);
+  onSelectRouteRef.current = onSelectRoute;
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -275,7 +352,9 @@ function TourMap({
     }).addTo(map);
 
     const handleClick = (event: LeafletMouseEvent) => {
-      onPointRef.current([event.latlng.lng, event.latlng.lat]);
+      if (editableRef.current) {
+        onPointRef.current([event.latlng.lng, event.latlng.lat]);
+      }
     };
     map.on("click", handleClick);
     const resizeObserver =
@@ -320,9 +399,15 @@ function TourMap({
         .forEach((line) => {
           L.polyline(line.map(position), {
             color: "#174ea6",
-            opacity: .62,
-            weight: 3,
-          }).addTo(overlay);
+            opacity: .72,
+            weight: 5,
+            smoothFactor: 1.5,
+            lineCap: "round",
+            lineJoin: "round",
+            bubblingMouseEvents: false,
+          })
+            .on("click", () => onSelectRouteRef.current(savedRoute.id))
+            .addTo(overlay);
         });
     });
     geometry
@@ -331,23 +416,54 @@ function TourMap({
         L.polyline(line.map(position), {
           color: "#d97706",
           opacity: .96,
-          weight: 6,
+          weight: 7,
+          smoothFactor: 1.5,
+          lineCap: "round",
+          lineJoin: "round",
+          interactive: true,
+          bubblingMouseEvents: false,
         }).addTo(overlay);
       });
-    geometry.flat().forEach((point) => {
-      L.circleMarker(position(point), {
-        radius: 6,
-        color: "#153c4d",
-        fillColor: "#f6c85f",
-        fillOpacity: 1,
-      }).addTo(overlay);
-    });
 
-    const points = geometry.flat();
+    if (catalogPreview) {
+      const tooltip = document.createElement("div");
+      tooltip.className = "catalog-route-tooltip";
+      const name = document.createElement("strong");
+      name.textContent = catalogPreview.name;
+      const publisher = document.createElement("span");
+      publisher.textContent = `${translate(language, "publishedBy")}: ${catalogPreview.publisher}`;
+      const distance = document.createElement("span");
+      distance.textContent = `${translate(language, "distance")}: ${distanceLabel(
+        catalogPreview.geometry,
+        language
+      )}`;
+      tooltip.append(name, publisher, distance);
+      catalogPreview.geometry
+        .filter((line) => line.length >= 2)
+        .forEach((line) => {
+          L.polyline(line.map(position), {
+            color: "#00a6a6",
+            opacity: 1,
+            weight: 8,
+            dashArray: "12 8",
+            smoothFactor: 1.5,
+            lineCap: "round",
+            lineJoin: "round",
+            bubblingMouseEvents: false,
+          })
+            .bindTooltip(tooltip.cloneNode(true) as HTMLElement, {
+              sticky: true,
+              className: "catalog-route-leaflet-tooltip",
+            })
+            .addTo(overlay);
+        });
+    }
+
+    const points = catalogPreview?.geometry.flat() || geometry.flat();
     if (points.length >= 2) {
       map.fitBounds(L.latLngBounds(points.map(position)), { padding: [24, 24] });
     }
-  }, [geometry, savedRoutes]);
+  }, [catalogPreview, geometry, language, savedRoutes]);
 
   return <div ref={containerRef} className="tour-map" />;
 }
@@ -503,7 +619,20 @@ export default function App({
   const [solidFetch, setSolidFetch] = useState<SolidFetch | null>(null);
   const [podRoot, setPodRoot] = useState<string | null>(null);
   const [state, setState] = useState<ToursState>({ ...EMPTY_STATE, drafts: [], activities: [] });
+  const [onboardingRecord, setOnboardingRecord] =
+    useState<SolidToursOnboardingRecord | null>(null);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
+  const [onboardingInfrastructureReady, setOnboardingInfrastructureReady] =
+    useState(false);
+  const [onboardingProfileReady, setOnboardingProfileReady] = useState(false);
+  const [onboardingRegistryOptions, setOnboardingRegistryOptions] =
+    useState<PublicRegistryOption[]>([]);
+  const [onboardingPublicRegistries, setOnboardingPublicRegistries] =
+    useState<string[]>([]);
+  const [onboardingProfileMetadata, setOnboardingProfileMetadata] =
+    useState<CatalogProfileMetadata>({ publisher: "", contactEmail: "" });
   const [draft, setDraft] = useState<TourDraft>(() => createGeneratedDraft());
+  const [isEditing, setIsEditing] = useState(true);
   const [completedDateInput, setCompletedDateInput] = useState(() => formatDate(today(), language));
   const [completedDateError, setCompletedDateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -518,6 +647,20 @@ export default function App({
   } | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] =
     useState<DeleteConfirmation | null>(null);
+  const [catalogConfirmation, setCatalogConfirmation] =
+    useState<CatalogConfirmation | null>(null);
+  const [catalogedRoutes, setCatalogedRoutes] = useState<CatalogedRoute[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogPreviewId, setCatalogPreviewId] = useState<string | null>(null);
+  const availableCatalogRoutes = useMemo(
+    () =>
+      availableCatalogedRoutes(catalogedRoutes, state.drafts, {
+        currentWebId: webId,
+        currentPodRoot: podRoot,
+        ownPublications: state.catalogPublications,
+      }),
+    [catalogedRoutes, podRoot, state.catalogPublications, state.drafts, webId]
+  );
   const authRevision = useRef(0);
   const completionOperationRevision = useRef(0);
   const podAccessActive = useRef(false);
@@ -548,16 +691,14 @@ export default function App({
   const activateState = useCallback((stored: ToursState) => {
     setState(stored);
     const firstDraft = stored.drafts[0];
-    setDraft(
-      firstDraft
-        ? {
-            ...firstDraft,
-            geometry: firstDraft.geometry.map((line) =>
-              line.map(([longitude, latitude]) => [longitude, latitude])
-            ),
-          }
-        : createGeneratedDraft()
-    );
+    if (firstDraft) {
+      setDraft(cloneDraft(firstDraft));
+      setIsEditing(false);
+      return;
+    }
+    const freshDraft = createGeneratedDraft();
+    setDraft(freshDraft);
+    setIsEditing(true);
   }, [createGeneratedDraft]);
 
   const activateLocalMode = useCallback((identityWebId: string | null = null) => {
@@ -566,6 +707,16 @@ export default function App({
     setCompletionInProgress(null);
     setCompleteConfirmation(null);
     setDeleteConfirmation(null);
+    setCatalogConfirmation(null);
+    setCatalogedRoutes([]);
+    setCatalogPreviewId(null);
+    setOnboardingRecord(null);
+    setOnboardingRequired(false);
+    setOnboardingInfrastructureReady(false);
+    setOnboardingProfileReady(false);
+    setOnboardingRegistryOptions([]);
+    setOnboardingPublicRegistries([]);
+    setOnboardingProfileMetadata({ publisher: "", contactEmail: "" });
     setWebId(null);
     setSolidFetch(null);
     setPodRoot(null);
@@ -590,6 +741,16 @@ export default function App({
     setError(null);
     setCompleteConfirmation(null);
     setDeleteConfirmation(null);
+    setCatalogConfirmation(null);
+    setCatalogedRoutes([]);
+    setCatalogPreviewId(null);
+    setOnboardingRecord(null);
+    setOnboardingRequired(false);
+    setOnboardingInfrastructureReady(false);
+    setOnboardingProfileReady(false);
+    setOnboardingRegistryOptions([]);
+    setOnboardingPublicRegistries([]);
+    setOnboardingProfileMetadata({ publisher: "", contactEmail: "" });
 
     if (!authenticated || !auth.webId) {
       activateLocalMode(auth.webId);
@@ -613,14 +774,77 @@ export default function App({
     try {
       const root = await resolvePodRoot(auth.webId, fetcher);
       if (revision !== authRevision.current) return;
+      setWebId(auth.webId);
+      setSolidFetch(() => fetcher);
+      setPodRoot(root);
+      const record = await loadSolidToursOnboarding(root, fetcher);
+      if (revision !== authRevision.current) return;
+      setOnboardingRecord(record);
+      const onboardingContext = embedded ? "embedded" : "standalone";
+      const [catalogReadiness, inboxReadiness, profileMetadata] = await Promise.all([
+        loadRouteCatalogReadiness({ podRoot: root, webId: auth.webId, fetcher }),
+        getSolidToursInboxReadiness({
+          podRoot: root,
+          webId: auth.webId,
+          fetcher,
+        }),
+        loadCatalogProfileMetadata(auth.webId, fetcher),
+      ]);
+      if (revision !== authRevision.current) return;
+      const configuredRegistries = catalogReadiness.publicRegistries;
+      const registryOptions = loadPublicRegistryOptions();
+      const knownRegistryUrls = new Set(registryOptions.map((option) => option.url));
+      const configuredOptions = configuredRegistries
+        .filter((url) => !knownRegistryUrls.has(url))
+        .map((url, index) => ({
+          id: `configured-${index + 1}`,
+          label: url,
+          url,
+        }));
+      setOnboardingRegistryOptions([...registryOptions, ...configuredOptions]);
+      setOnboardingPublicRegistries(configuredRegistries);
+      setOnboardingProfileMetadata(profileMetadata);
+      const catalogReadyForRecord = Boolean(
+        record?.publicRegistryUrl &&
+          catalogReadiness.catalogConfigured &&
+          configuredRegistries.includes(record.publicRegistryUrl)
+      );
+      const infrastructureReady = Boolean(
+        catalogReadiness.catalogConfigured &&
+          configuredRegistries.length > 0 &&
+          inboxReadiness.configured
+      );
+      const profileReady = Boolean(
+        profileMetadata.publisher && profileMetadata.contactEmail
+      );
+      setOnboardingInfrastructureReady(
+        embedded ? infrastructureReady : true
+      );
+      setOnboardingProfileReady(embedded ? profileReady : true);
+      if (
+        !onboardingCompleteFor(record, onboardingContext) ||
+        !catalogReadyForRecord ||
+        !inboxReadiness.configured ||
+        !profileReady
+      ) {
+        setOnboardingRequired(true);
+        if (embedded && !profileReady) {
+          setError(
+            "Vervollständige zuerst deinen Publisher-Namen und deine Kontakt-E-Mail im Profile Manager oder im allgemeinen Dataspace-Onboarding."
+          );
+        } else if (embedded && !infrastructureReady) {
+          setError(
+            "Schließe zuerst das allgemeine Dataspace-Onboarding ab, damit eine öffentliche Research-Registry und eine öffentliche Append-only-Solid-Inbox eingerichtet sind."
+          );
+        }
+        return;
+      }
       await ensureStorage(root, auth.webId, fetcher);
       if (revision !== authRevision.current) return;
       const stored = await loadState(root, fetcher);
       if (revision !== authRevision.current) return;
       podAccessActive.current = true;
-      setWebId(auth.webId);
-      setSolidFetch(() => fetcher);
-      setPodRoot(root);
+      setOnboardingRequired(false);
       activateState(stored);
     } catch (reason) {
       if (revision !== authRevision.current) return;
@@ -628,7 +852,7 @@ export default function App({
     } finally {
       if (revision === authRevision.current) setLoading(false);
     }
-  }, [activateLocalMode, activateState]);
+  }, [activateLocalMode, activateState, embedded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -773,12 +997,160 @@ export default function App({
       podRoot &&
       hasSolidPodAccess(webId)
   );
+  const refreshCatalogedRoutes = useCallback(async () => {
+    if (!podConnected || !podRoot || !webId || !solidFetch) {
+      setCatalogedRoutes([]);
+      return;
+    }
+    const catalogAuthRevision = authRevision.current;
+    setCatalogLoading(true);
+    try {
+      const routes = await discoverCatalogedRoutes({
+        podRoot,
+        webId,
+        fetcher: solidFetch,
+        anonymousFetch: (input, init) => globalThis.fetch(input, init),
+      });
+      if (catalogAuthRevision === authRevision.current) {
+        setCatalogedRoutes(routes);
+        const report = getCatalogedRouteDiscoveryReport(routes);
+        if (report && (report.failures.length > 0 || report.truncatedCount > 0)) {
+          setError(
+            "Einige Einträge des öffentlichen Routenkatalogs konnten nicht sicher geladen werden."
+          );
+        }
+      }
+    } finally {
+      if (catalogAuthRevision === authRevision.current) setCatalogLoading(false);
+    }
+  }, [podConnected, podRoot, solidFetch, webId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!podConnected) {
+      setCatalogedRoutes([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void refreshCatalogedRoutes().catch((reason) => {
+      if (!cancelled) {
+        setCatalogedRoutes([]);
+        setFailure(reason);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [podConnected, refreshCatalogedRoutes]);
   const renderedAuthRevision = authRevision.current;
   const assertCurrentAuthContext = () => {
     if (renderedAuthRevision !== authRevision.current) {
       throw new Error("Die Solid-Sitzung hat sich geändert. Bitte wiederhole die Aktion.");
     }
   };
+
+  const completeAppOnboarding = ({
+    registryUrl,
+    publisher,
+    contactEmail,
+  }: {
+    registryUrl?: string;
+    publisher?: string;
+    contactEmail?: string;
+  } = {}) =>
+    mutate(async () => {
+      assertCurrentAuthContext();
+      if (!webId || !solidFetch || !podRoot) {
+        throw new Error("Der private Solid Pod ist für die Einrichtung nicht verfügbar.");
+      }
+      const context = embedded ? "embedded" : "standalone";
+      let selectedRegistry: string;
+      let publicRegistries: string[];
+      if (embedded) {
+        const [readiness, inboxReadiness, profileMetadata] = await Promise.all([
+          loadRouteCatalogReadiness({ podRoot, webId, fetcher: solidFetch }),
+          getSolidToursInboxReadiness({ podRoot, webId, fetcher: solidFetch }),
+          loadCatalogProfileMetadata(webId, solidFetch),
+        ]);
+        assertCurrentAuthContext();
+        if (
+          !readiness.catalogConfigured ||
+          readiness.publicRegistries.length === 0 ||
+          !inboxReadiness.configured
+        ) {
+          throw new Error(
+            "Schließe zuerst das allgemeine Dataspace-Onboarding ab, damit eine öffentliche Research-Registry und eine öffentliche Append-only-Solid-Inbox eingerichtet sind."
+          );
+        }
+        if (!profileMetadata.publisher || !profileMetadata.contactEmail) {
+          throw new Error(
+            "Vervollständige zuerst deinen Publisher-Namen und deine Kontakt-E-Mail im Profile Manager oder im allgemeinen Dataspace-Onboarding."
+          );
+        }
+        selectedRegistry =
+          (onboardingRecord?.publicRegistryUrl &&
+          readiness.publicRegistries.includes(onboardingRecord.publicRegistryUrl)
+            ? onboardingRecord.publicRegistryUrl
+            : readiness.publicRegistries[0]);
+        publicRegistries = readiness.publicRegistries;
+      } else {
+        if (!registryUrl) {
+          throw new Error("Die öffentliche Research-Registry ist ungültig.");
+        }
+        if (!publisher || !contactEmail) {
+          throw new Error(
+            "Publisher-Name und Kontakt-E-Mail müssen für öffentliche Katalogeinträge angegeben werden."
+          );
+        }
+        await saveCatalogProfileMetadata({
+          webId,
+          publisher,
+          contactEmail,
+          fetcher: solidFetch,
+        });
+        assertCurrentAuthContext();
+        // Both operations update the WebID profile. Keep them sequential so
+        // Catalog setup preserves the freshly linked ldp:inbox value.
+        await ensureSolidToursInbox({ podRoot, webId, fetcher: solidFetch });
+        assertCurrentAuthContext();
+        const readiness = await ensureRouteCatalogReadiness({
+          podRoot,
+          webId,
+          registryUrl,
+          fetcher: solidFetch,
+        });
+        assertCurrentAuthContext();
+        if (
+          !readiness.catalogConfigured ||
+          !readiness.publicRegistries.includes(readiness.selectedRegistry)
+        ) {
+          throw new Error(
+            "Die öffentliche Research-Registry konnte nicht sicher eingerichtet werden."
+          );
+        }
+        selectedRegistry = readiness.selectedRegistry;
+        publicRegistries = readiness.publicRegistries;
+      }
+      const record = completeOnboardingRecord(
+        onboardingRecord,
+        context,
+        selectedRegistry
+      );
+      await ensureStorage(podRoot, webId, solidFetch);
+      assertCurrentAuthContext();
+      await saveSolidToursOnboarding(podRoot, record, webId, solidFetch);
+      assertCurrentAuthContext();
+      const stored = await loadState(podRoot, solidFetch);
+      assertCurrentAuthContext();
+      podAccessActive.current = true;
+      setOnboardingRecord(record);
+      setOnboardingRequired(false);
+      setOnboardingInfrastructureReady(true);
+      setOnboardingProfileReady(true);
+      setOnboardingPublicRegistries(publicRegistries);
+      activateState(stored);
+    });
 
   const persistStateForCurrentMode = async (
     next: ToursState,
@@ -799,13 +1171,16 @@ export default function App({
     );
   };
 
-  const updateDraft = <K extends keyof TourDraft>(key: K, value: TourDraft[K]) =>
+  const updateDraft = <K extends keyof TourDraft>(key: K, value: TourDraft[K]) => {
+    if (!isEditing) return;
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       return { ...current, [key]: value, updatedAt: new Date().toISOString() };
     });
+  };
 
   const addPoint = (point: Coordinate) => {
+    if (!isEditing) return;
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       const lines = current.geometry.length ? current.geometry.map((line) => [...line]) : [[]];
@@ -822,6 +1197,7 @@ export default function App({
   };
 
   const undoPoint = () => {
+    if (!isEditing) return;
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       const lines = current.geometry.map((line) => [...line]);
@@ -840,6 +1216,7 @@ export default function App({
   };
 
   const clearRoute = () => {
+    if (!isEditing) return;
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       return {
@@ -854,6 +1231,10 @@ export default function App({
 
   const importFile = (file: File | undefined) => {
     if (!file) return;
+    if (editorHasPendingChanges()) {
+      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+      return;
+    }
     void mutate(async () => {
       const imported = importRouteFile(file.name, await file.text(), {
         importedTour: t("importedTour"),
@@ -861,7 +1242,7 @@ export default function App({
       });
       assertCurrentAuthContext();
       const now = new Date().toISOString();
-      setDraft({
+      const importedDraft: TourDraft = {
         id: createId(),
         name: imported.name,
         routeSource: imported.routeSource,
@@ -870,8 +1251,374 @@ export default function App({
         durationSource: imported.durationSource,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      setDraft(importedDraft);
+      setIsEditing(true);
     });
+  };
+
+  const persistCatalogedDraft = async (
+    normalized: TourDraft,
+    previousDraft: TourDraft,
+    renderedPublication: RouteCatalogPublication
+  ): Promise<ToursState> => {
+    if (!podConnected || !podRoot || !solidFetch || !webId) {
+      throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
+    }
+    const resumingUpdate = renderedPublication.phase === "updating";
+    if (!resumingUpdate && renderedPublication.phase !== "published") {
+      throw new Error(
+        "Die Routenvorlage ist erst nach Abschluss der laufenden Katalogaktion wieder bearbeitbar."
+      );
+    }
+    if (resumingUpdate) {
+      if (!catalogPhaseLeaseExpired(renderedPublication)) {
+        throw new Error("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
+      }
+      if (
+        !renderedPublication.pendingUpdate ||
+        !sameStoredDraft(renderedPublication.pendingUpdate.draft, normalized)
+      ) {
+        throw new Error(
+          "Das unterbrochene Routenvorlagen-Update enthält keinen sicher wiederaufnehmbaren Zielstand."
+        );
+      }
+    }
+
+    const remoteSnapshot = await loadStateSnapshot(podRoot, solidFetch);
+    assertCurrentAuthContext();
+    if (!remoteSnapshot.etag) {
+      throw new Error(
+        "Der Pod liefert keinen starken Versionsnachweis für das Routenvorlagen-Update."
+      );
+    }
+    const authoritativeDraft = remoteSnapshot.state.drafts.find(
+      (item) => item.id === normalized.id
+    );
+    const authoritativePublication = remoteSnapshot.state.catalogPublications.find(
+      (publication) => publication.sourceDraftId === normalized.id
+    );
+    if (
+      !authoritativeDraft ||
+      JSON.stringify(authoritativeDraft) !== JSON.stringify(previousDraft) ||
+      !authoritativePublication ||
+      !sameCatalogPublication(authoritativePublication, renderedPublication)
+    ) {
+      setState(remoteSnapshot.state);
+      throw new Error(
+        "Die Route oder ihre Katalogveröffentlichung wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen."
+      );
+    }
+    if (authoritativePublication.phase !== renderedPublication.phase) {
+      setState(remoteSnapshot.state);
+      throw new Error("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
+    }
+    if (
+      resumingUpdate &&
+      (authoritativePublication.phaseChangedAt !== renderedPublication.phaseChangedAt ||
+        !authoritativePublication.pendingUpdate ||
+        authoritativePublication.pendingUpdate.operationId !==
+          renderedPublication.pendingUpdate?.operationId ||
+        !sameStoredDraft(authoritativePublication.pendingUpdate.draft, normalized))
+    ) {
+      setState(remoteSnapshot.state);
+      throw new Error("Das Routenvorlagen-Update wurde zwischenzeitlich übernommen.");
+    }
+
+    const phaseChangedAt = new Date().toISOString();
+    const operationId =
+      authoritativePublication.pendingUpdate?.operationId || createId();
+    const leaseId = createId();
+    const claimedPublication: RouteCatalogPublication = {
+      ...authoritativePublication,
+      phase: "updating",
+      phaseChangedAt,
+      pendingUpdate: {
+        operationId,
+        leaseId,
+        draft: cloneDraft(normalized),
+      },
+    };
+    const claimedSnapshot = await saveStateIfUnchanged(
+      podRoot,
+      {
+        ...remoteSnapshot.state,
+        catalogPublications: remoteSnapshot.state.catalogPublications.map((publication) =>
+          publication.routeTemplateId === claimedPublication.routeTemplateId
+            ? claimedPublication
+            : publication
+        ),
+      },
+      remoteSnapshot.etag,
+      webId,
+      solidFetch
+    );
+    assertCurrentAuthContext();
+    setState(claimedSnapshot.state);
+
+    const previousPublicSnapshot = createRouteTemplateSnapshot(
+      authoritativeDraft,
+      claimedPublication.routeTemplateId
+    );
+    const nextPublicSnapshot = createRouteTemplateSnapshot(
+      normalized,
+      claimedPublication.routeTemplateId
+    );
+    let publicUpdate: PublicRouteTemplateUpdateResult | null = null;
+    let catalogUpdateAttempted = false;
+    let writtenDraft: { etag: string } | null = null;
+
+    try {
+      const observedPublic = await loadPublicRouteTemplateResourceSnapshot(
+        podRoot,
+        claimedPublication.resourceUrl,
+        claimedPublication.routeTemplateId,
+        solidFetch
+      );
+      assertCurrentAuthContext();
+      const publicMatchesPrevious =
+        JSON.stringify(observedPublic.snapshot) === JSON.stringify(previousPublicSnapshot);
+      const publicMatchesNext =
+        JSON.stringify(observedPublic.snapshot) === JSON.stringify(nextPublicSnapshot);
+      if (!publicMatchesPrevious && !(resumingUpdate && publicMatchesNext)) {
+        throw new Error(
+          "Die öffentliche Routenvorlage weicht vom gespeicherten privaten Stand ab."
+        );
+      }
+      if (publicMatchesPrevious) {
+        publicUpdate = await updatePublicRouteTemplateConditionally(
+          podRoot,
+          claimedPublication.resourceUrl,
+          claimedPublication.routeTemplateId,
+          nextPublicSnapshot,
+          webId,
+          solidFetch,
+          observedPublic
+        );
+        assertCurrentAuthContext();
+      }
+
+      catalogUpdateAttempted = true;
+      const catalogUpdate = await updateRouteTemplateCatalogEntry({
+        podRoot,
+        webId,
+        snapshot: nextPublicSnapshot,
+        resourceUrl: claimedPublication.resourceUrl,
+        catalogDatasetUrl: claimedPublication.catalogDatasetUrl,
+        publishedAt: claimedPublication.publishedAt,
+        operationId,
+        fetcher: solidFetch,
+      });
+      assertCurrentAuthContext();
+      if (
+        catalogUpdate.datasetIdentifier !== claimedPublication.datasetIdentifier ||
+        catalogUpdate.catalogDatasetUrl !== claimedPublication.catalogDatasetUrl
+      ) {
+        throw new Error("Der Katalog antwortete mit einer unerwarteten Routenvorlagen-Referenz.");
+      }
+
+      const privateSnapshot = await loadDraftMasterResourceSnapshot(
+        podRoot,
+        authoritativeDraft.id,
+        solidFetch
+      );
+      assertCurrentAuthContext();
+      const privateMatchesPrevious = sameStoredDraft(
+        privateSnapshot.draft,
+        authoritativeDraft
+      );
+      const privateMatchesNext = sameStoredDraft(privateSnapshot.draft, normalized);
+      if (!privateMatchesPrevious && !(resumingUpdate && privateMatchesNext)) {
+        throw new Error("Der private Tourentwurf wurde zwischenzeitlich verändert.");
+      }
+      if (privateMatchesPrevious) {
+        writtenDraft = await saveDraftConditionally(
+          podRoot,
+          normalized,
+          privateSnapshot.etag,
+          webId,
+          solidFetch
+        );
+        assertCurrentAuthContext();
+      }
+
+      for (let attempt = 0; attempt < RECOVERY_STATE_CAS_ATTEMPTS; attempt += 1) {
+        const latest = await loadStateSnapshot(podRoot, solidFetch);
+        assertCurrentAuthContext();
+        const latestDraft = latest.state.drafts.find((item) => item.id === normalized.id);
+        const latestPublication = latest.state.catalogPublications.find(
+          (publication) => publication.routeTemplateId === claimedPublication.routeTemplateId
+        );
+        if (
+          !latest.etag ||
+          JSON.stringify(latestDraft) !== JSON.stringify(authoritativeDraft) ||
+          !latestPublication ||
+          latestPublication.phase !== "updating" ||
+          latestPublication.phaseChangedAt !== phaseChangedAt ||
+          !sameCatalogPublication(latestPublication, claimedPublication) ||
+          !samePendingUpdate(latestPublication, operationId, leaseId, normalized)
+        ) {
+          throw new Error(
+            "Das Routenvorlagen-Update wurde parallel verändert und konnte nicht abgeschlossen werden."
+          );
+        }
+        const { pendingUpdate: _pendingUpdate, ...publicationWithoutPendingUpdate } =
+          latestPublication;
+        const finalizedPublication: RouteCatalogPublication = {
+          ...publicationWithoutPendingUpdate,
+          phase: "published",
+          phaseChangedAt: new Date().toISOString(),
+          sourceDraftUpdatedAt: normalized.updatedAt,
+        };
+        const nextState: ToursState = {
+          ...latest.state,
+          drafts: [
+            normalized,
+            ...latest.state.drafts.filter((item) => item.id !== normalized.id),
+          ],
+          catalogPublications: latest.state.catalogPublications.map((publication) =>
+            publication.routeTemplateId === finalizedPublication.routeTemplateId
+              ? finalizedPublication
+              : publication
+          ),
+        };
+        try {
+          const committed = await saveStateIfUnchanged(
+            podRoot,
+            nextState,
+            latest.etag,
+            webId,
+            solidFetch
+          );
+          assertCurrentAuthContext();
+          setDraft(cloneDraft(normalized));
+          setState(committed.state);
+          try {
+            await refreshCatalogedRoutes();
+          } catch {
+            // The authoritative update is complete; discovery retries later.
+          }
+          return committed.state;
+        } catch (reason) {
+          if (!isStateConflictError(reason) || attempt === RECOVERY_STATE_CAS_ATTEMPTS - 1) {
+            throw reason;
+          }
+        }
+      }
+      throw new Error("Das Routenvorlagen-Update konnte nicht atomar abgeschlossen werden.");
+    } catch (operationError) {
+      if (resumingUpdate) {
+        throw new AggregateError(
+          [operationError],
+          "Das unterbrochene Routenvorlagen-Update konnte noch nicht abgeschlossen werden. Der gespeicherte Zielstand kann erneut fortgesetzt werden."
+        );
+      }
+      const compensationErrors: unknown[] = [];
+      if (writtenDraft) {
+        try {
+          await saveDraftConditionally(
+            podRoot,
+            authoritativeDraft,
+            writtenDraft.etag,
+            webId,
+            solidFetch
+          );
+        } catch (reason) {
+          compensationErrors.push(reason);
+        }
+      }
+      if (catalogUpdateAttempted) {
+        try {
+          await updateRouteTemplateCatalogEntry({
+            podRoot,
+            webId,
+            snapshot: previousPublicSnapshot,
+            resourceUrl: claimedPublication.resourceUrl,
+            catalogDatasetUrl: claimedPublication.catalogDatasetUrl,
+            publishedAt: claimedPublication.publishedAt,
+            operationId,
+            fetcher: solidFetch,
+          });
+        } catch (reason) {
+          compensationErrors.push(reason);
+        }
+      }
+      if (publicUpdate) {
+        try {
+          await updatePublicRouteTemplateConditionally(
+            podRoot,
+            claimedPublication.resourceUrl,
+            claimedPublication.routeTemplateId,
+            publicUpdate.previous.snapshot,
+            webId,
+            solidFetch,
+            publicUpdate.current
+          );
+        } catch (reason) {
+          compensationErrors.push(reason);
+        }
+      }
+
+      if (compensationErrors.length === 0) {
+        for (let attempt = 0; attempt < RECOVERY_STATE_CAS_ATTEMPTS; attempt += 1) {
+          try {
+            const latest = await loadStateSnapshot(podRoot, solidFetch);
+            assertCurrentAuthContext();
+            const latestPublication = latest.state.catalogPublications.find(
+              (publication) => publication.routeTemplateId === claimedPublication.routeTemplateId
+            );
+            if (
+              !latest.etag ||
+              !latestPublication ||
+              latestPublication.phase !== "updating" ||
+              latestPublication.phaseChangedAt !== phaseChangedAt ||
+              !sameCatalogPublication(latestPublication, claimedPublication) ||
+              !samePendingUpdate(latestPublication, operationId, leaseId, normalized)
+            ) {
+              throw new Error("Der Aktualisierungsstatus wurde zwischenzeitlich verändert.");
+            }
+            const restored = await saveStateIfUnchanged(
+              podRoot,
+              {
+                ...latest.state,
+                catalogPublications: latest.state.catalogPublications.map((publication) => {
+                  if (publication.routeTemplateId !== claimedPublication.routeTemplateId) {
+                    return publication;
+                  }
+                  const {
+                    pendingUpdate: _pendingUpdate,
+                    ...publicationWithoutPendingUpdate
+                  } = publication;
+                  return {
+                    ...publicationWithoutPendingUpdate,
+                    phase: "published" as const,
+                    phaseChangedAt: new Date().toISOString(),
+                  };
+                }),
+              },
+              latest.etag,
+              webId,
+              solidFetch
+            );
+            setState(restored.state);
+            break;
+          } catch (reason) {
+            if (!isStateConflictError(reason) || attempt === RECOVERY_STATE_CAS_ATTEMPTS - 1) {
+              compensationErrors.push(reason);
+              break;
+            }
+          }
+        }
+      }
+
+      if (compensationErrors.length > 0) {
+        throw new AggregateError(
+          [operationError, ...compensationErrors],
+          "Die veröffentlichte Route konnte nicht vollständig aktualisiert werden. Deine Änderungen bleiben im Editor erhalten."
+        );
+      }
+      throw operationError;
+    }
   };
 
   const persistDraft = async (candidate: TourDraft): Promise<ToursState> => {
@@ -880,6 +1627,19 @@ export default function App({
     if (!isValidGeometry(candidate.geometry)) throw new Error("Die Tour braucht mindestens zwei Punkte.");
     const normalized = { ...candidate, name: candidate.name.trim(), updatedAt: new Date().toISOString() };
     const previousDraft = state.drafts.find((item) => item.id === normalized.id) || null;
+    const existingPublication = state.catalogPublications.find(
+      (publication) => publication.sourceDraftId === normalized.id
+    );
+    if (previousDraft && existingPublication) {
+      const contentChanged = !sameDraftContent(previousDraft, normalized);
+      if (contentChanged) {
+        return persistCatalogedDraft(normalized, previousDraft, existingPublication);
+      }
+      // Completing an unchanged cataloged route must not rewrite its private
+      // master merely to advance updatedAt.
+      setDraft(cloneDraft(previousDraft));
+      return state;
+    }
     let writtenDraft: { etag: string } | null = null;
     if (podConnected && podRoot && solidFetch && webId) {
       const previousSnapshot = previousDraft
@@ -958,6 +1718,7 @@ export default function App({
   const handleSave = () =>
     mutate(async () => {
       await persistDraft(draft);
+      setIsEditing(false);
     });
 
   const handleComplete = async (activityType: ActivityType, completionDate: string) => {
@@ -966,9 +1727,11 @@ export default function App({
     try {
       await mutate(async () => {
         assertCurrentAuthContext();
-        const stateWithDraft = await persistDraft(draft);
-        assertCurrentAuthContext();
-        const storedDraft = stateWithDraft.drafts.find((item) => item.id === draft.id) || draft;
+        const storedDraft = state.drafts.find((item) => item.id === draft.id);
+        if (!storedDraft || (isEditing && !sameDraftContent(storedDraft, draft))) {
+          throw new Error("Speichere die Route, bevor du sie als gemacht markierst.");
+        }
+        const stateWithDraft = state;
         const activity = completeTour(storedDraft, completionDate, activityType);
         let writtenActivity: { etag: string } | null = null;
         if (podConnected && podRoot && solidFetch && webId) {
@@ -1061,6 +1824,10 @@ export default function App({
       }
       setCompletedDateInput(formatDate(normalizedCompletedDate, language));
       setCompletedDateError(null);
+      const storedDraft = state.drafts.find((item) => item.id === draft.id);
+      if (!storedDraft || (isEditing && !sameDraftContent(storedDraft, draft))) {
+        throw new Error("Speichere die Route, bevor du sie als gemacht markierst.");
+      }
       if (!isValidGeometry(draft.geometry)) {
         throw new Error("Die Tour braucht mindestens zwei Punkte.");
       }
@@ -1469,11 +2236,648 @@ export default function App({
       await resetActiveRun(validateActiveRun(podRoot, state.activeRun));
     });
 
-  const selectDraft = (selected: TourDraft) => {
-    setDraft({ ...selected, geometry: selected.geometry.map((line) => [...line]) });
+  const requestCatalogIndex = (drafts: TourDraft[]) => {
+    const unpublished = drafts.filter(
+      (candidate) =>
+        isDraftEligibleForCatalogPublication(candidate) &&
+        !state.catalogPublications.some(
+          (publication) => publication.sourceDraftId === candidate.id
+        )
+    );
+    if (unpublished.length > 0) setCatalogConfirmation({ kind: "index", drafts: unpublished });
   };
 
-  const duplicateDraft = (source: TourDraft) =>
+  const catalogPhaseLeaseExpired = (publication: RouteCatalogPublication) =>
+    publication.phase !== "published" &&
+    Date.now() - Date.parse(publication.phaseChangedAt) >= CATALOG_PUBLICATION_LEASE_MS;
+
+  const requestCatalogRemoval = (item: TourDraft) => {
+    const publication = state.catalogPublications.find(
+      (candidate) => candidate.sourceDraftId === item.id
+    );
+    if (!publication) return;
+    if (publication.phase === "publishing" && !catalogPhaseLeaseExpired(publication)) {
+      setError("Die Routenvorlage wird gerade veröffentlicht. Versuche es nach Abschluss erneut.");
+      return;
+    }
+    if (publication.phase === "updating" && !catalogPhaseLeaseExpired(publication)) {
+      setError("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
+      return;
+    }
+    if (publication.phase === "removing" && !catalogPhaseLeaseExpired(publication)) {
+      setError("Die Routenvorlage wird bereits in einem anderen Tab entfernt.");
+      return;
+    }
+    setCatalogConfirmation({ kind: "remove", draft: item, publication });
+  };
+
+  const sameCatalogPublication = (
+    left: RouteCatalogPublication,
+    right: RouteCatalogPublication
+  ) =>
+    left.routeTemplateId === right.routeTemplateId &&
+    left.sourceDraftId === right.sourceDraftId &&
+    left.sourceDraftUpdatedAt === right.sourceDraftUpdatedAt &&
+    left.resourceUrl === right.resourceUrl &&
+    left.datasetIdentifier === right.datasetIdentifier &&
+    left.catalogDatasetUrl === right.catalogDatasetUrl &&
+    left.publishedAt === right.publishedAt;
+
+  const indexDraftsInCatalog = (requestedDrafts: TourDraft[]) =>
+    mutate(async () => {
+      assertCurrentAuthContext();
+      if (!podConnected || !podRoot || !solidFetch || !webId) {
+        throw new Error("Für die Katalogveröffentlichung ist ein verbundener Solid Pod erforderlich.");
+      }
+      const readiness = await loadRouteCatalogReadiness({ podRoot, webId, fetcher: solidFetch });
+      if (!readiness.catalogConfigured || readiness.publicRegistries.length === 0) {
+        throw new Error(
+          "Für öffentliche Routenvorlagen müssen ein Katalog und eine öffentliche Research-Registry konfiguriert sein."
+        );
+      }
+      const remoteSnapshot = await loadStateSnapshot(podRoot, solidFetch);
+      assertCurrentAuthContext();
+      if (!remoteSnapshot.etag) {
+        throw new Error("Der Pod liefert keinen starken Versionsnachweis für den Solid-Tours-Status.");
+      }
+      const requestedIds = new Set(requestedDrafts.map((item) => item.id));
+      const remoteDrafts = remoteSnapshot.state.drafts.filter((item) => requestedIds.has(item.id));
+      if (
+        remoteDrafts.length !== requestedIds.size ||
+        remoteDrafts.some((item) => {
+          const requested = requestedDrafts.find((candidate) => candidate.id === item.id);
+          return !requested || JSON.stringify(requested) !== JSON.stringify(item);
+        })
+      ) {
+        setState(remoteSnapshot.state);
+        throw new Error("Mindestens eine Tour wurde im Pod geändert. Der aktuelle Stand wurde neu geladen.");
+      }
+      if (remoteDrafts.some((item) => !isDraftEligibleForCatalogPublication(item))) {
+        setState(remoteSnapshot.state);
+        throw new Error(
+          "Eine aus dem Routenkatalog übernommene Tour kann nicht erneut katalogisiert werden."
+        );
+      }
+      if (
+        remoteSnapshot.state.catalogPublications.some((publication) =>
+          requestedIds.has(publication.sourceDraftId)
+        )
+      ) {
+        setState(remoteSnapshot.state);
+        throw new Error("Mindestens eine Tour ist bereits im Katalog veröffentlicht.");
+      }
+
+      // Store deterministic cleanup handles privately before anything becomes
+      // public. A browser/tab crash can therefore never leave a public route
+      // without an unpublish action in the next Solid Tours session.
+      const planned = remoteDrafts.map((item) => {
+        const snapshot = createRouteTemplateSnapshot(item);
+        const datasetIdentifier = `solid-tours-route-template-${snapshot.properties.routeTemplateId}`;
+        const resourceUrl = `${podRoot}solid-tours/public/cataloged-routes/${snapshot.properties.routeTemplateId}.geojson`;
+        const phaseChangedAt = new Date().toISOString();
+        return {
+          snapshot,
+          publication: {
+            phase: "publishing",
+            phaseChangedAt,
+            routeTemplateId: snapshot.properties.routeTemplateId,
+            sourceDraftId: item.id,
+            sourceDraftUpdatedAt: item.updatedAt,
+            resourceUrl,
+            datasetIdentifier,
+            catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+            publishedAt: phaseChangedAt,
+          } satisfies RouteCatalogPublication,
+        };
+      });
+      const staged = await saveStateIfUnchanged(
+        podRoot,
+        {
+          ...remoteSnapshot.state,
+          catalogPublications: [
+            ...planned.map(({ publication }) => publication),
+            ...remoteSnapshot.state.catalogPublications,
+          ],
+        },
+        remoteSnapshot.etag,
+        webId,
+        solidFetch
+      );
+      assertCurrentAuthContext();
+      setState(staged.state);
+
+      const rollbackErrors: unknown[] = [];
+      try {
+        for (const { snapshot, publication: expectedPublication } of planned) {
+          const resourceUrl = await savePublicRouteTemplate(
+            podRoot,
+            snapshot,
+            webId,
+            solidFetch
+          );
+          if (resourceUrl !== expectedPublication.resourceUrl) {
+            throw new Error("Der Pod antwortete mit einer unerwarteten Routenvorlagen-Referenz.");
+          }
+          const publication = await publishRouteTemplateCatalogEntry({
+            podRoot,
+            webId,
+            snapshot,
+            resourceUrl,
+            fetcher: solidFetch,
+          });
+          if (
+            publication.datasetIdentifier !== expectedPublication.datasetIdentifier ||
+            publication.catalogDatasetUrl !== expectedPublication.catalogDatasetUrl
+          ) {
+            throw new Error("Der Katalog antwortete mit einer unerwarteten Routenvorlagen-Referenz.");
+          }
+        }
+
+        // The public writes above are not the commit point. Promote only the
+        // exact private reservations made by this operation. If another tab or
+        // a manual Pod edit removed/replaced one, the catch path below removes
+        // every public side effect again.
+        let finalized = false;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const latest = await loadStateSnapshot(podRoot, solidFetch);
+          assertCurrentAuthContext();
+          if (!latest.etag) {
+            throw new Error(
+              "Der Pod liefert keinen starken Versionsnachweis für den Katalogabschluss."
+            );
+          }
+          const authoritative = planned.map(({ publication }) =>
+            latest.state.catalogPublications.find(
+              (candidate) => candidate.routeTemplateId === publication.routeTemplateId
+            )
+          );
+          if (
+            authoritative.some(
+              (candidate, index) =>
+                !candidate ||
+                !sameCatalogPublication(candidate, planned[index].publication) ||
+                !new Set(["publishing", "published"]).has(candidate.phase)
+            )
+          ) {
+            setState(latest.state);
+            throw new Error(
+              "Die Katalogveröffentlichung wurde parallel abgebrochen und wird bereinigt."
+            );
+          }
+          if (authoritative.every((candidate) => candidate?.phase === "published")) {
+            setState(latest.state);
+            finalized = true;
+            break;
+          }
+          const next = {
+            ...latest.state,
+            catalogPublications: latest.state.catalogPublications.map((candidate) =>
+              planned.some(
+                ({ publication }) =>
+                  sameCatalogPublication(candidate, publication)
+              )
+                ? {
+                    ...candidate,
+                    phase: "published" as const,
+                    phaseChangedAt: new Date().toISOString(),
+                  }
+                : candidate
+            ),
+          };
+          try {
+            const committed = await saveStateIfUnchanged(
+              podRoot,
+              next,
+              latest.etag,
+              webId,
+              solidFetch
+            );
+            assertCurrentAuthContext();
+            setState(committed.state);
+            finalized = true;
+            break;
+          } catch (finalizeError) {
+            if (!isStateConflictError(finalizeError) || attempt === 2) {
+              throw finalizeError;
+            }
+          }
+        }
+        if (!finalized) {
+          throw new Error("Die Katalogveröffentlichung konnte nicht atomar abgeschlossen werden.");
+        }
+      } catch (operationError) {
+        for (const { publication } of [...planned].reverse()) {
+          try {
+            await removeCatalogEntry({
+              podRoot,
+              webId,
+              datasetIdentifier: publication.datasetIdentifier,
+              catalogDatasetUrl: publication.catalogDatasetUrl,
+              fetcher: solidFetch,
+            });
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError);
+          }
+          try {
+            await setOwnerOnlyIfPresent(publication.resourceUrl, webId, solidFetch);
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError);
+          }
+          try {
+            await safeDelete(publication.resourceUrl, solidFetch);
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError);
+          }
+        }
+        if (rollbackErrors.length === 0) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              const latest = await loadStateSnapshot(podRoot, solidFetch);
+              assertCurrentAuthContext();
+              if (!latest.etag) {
+                throw new Error(
+                  "Der Pod liefert keinen starken Versionsnachweis für die Katalog-Rückabwicklung."
+                );
+              }
+              const remaining = latest.state.catalogPublications.filter(
+                (publication) =>
+                  !planned.some(
+                    ({ publication: expected }) =>
+                      sameCatalogPublication(publication, expected)
+                  )
+              );
+              if (remaining.length === latest.state.catalogPublications.length) {
+                setState(latest.state);
+                break;
+              }
+              const reverted = await saveStateIfUnchanged(
+                podRoot,
+                { ...latest.state, catalogPublications: remaining },
+                latest.etag,
+                webId,
+                solidFetch
+              );
+              assertCurrentAuthContext();
+              setState(reverted.state);
+              break;
+            } catch (rollbackStateError) {
+              if (attempt === 2 || !isStateConflictError(rollbackStateError)) {
+                rollbackErrors.push(rollbackStateError);
+                break;
+              }
+            }
+          }
+        } else {
+          // A failed external cleanup stays explicitly recoverable. The
+          // publication is never presented as successfully committed.
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              const latest = await loadStateSnapshot(podRoot, solidFetch);
+              assertCurrentAuthContext();
+              if (!latest.etag) {
+                throw new Error(
+                  "Der Pod liefert keinen starken Versionsnachweis für die Katalogbereinigung."
+                );
+              }
+              const next = {
+                ...latest.state,
+                catalogPublications: latest.state.catalogPublications.map((publication) =>
+                  planned.some(({ publication: expected }) =>
+                    sameCatalogPublication(publication, expected)
+                  )
+                    ? {
+                        ...publication,
+                        phase: "removing" as const,
+                        phaseChangedAt: new Date().toISOString(),
+                      }
+                    : publication
+                ),
+              };
+              const committed = await saveStateIfUnchanged(
+                podRoot,
+                next,
+                latest.etag,
+                webId,
+                solidFetch
+              );
+              assertCurrentAuthContext();
+              setState(committed.state);
+              break;
+            } catch (cleanupStateError) {
+              if (attempt === 2 || !isStateConflictError(cleanupStateError)) {
+                rollbackErrors.push(cleanupStateError);
+                break;
+              }
+            }
+          }
+        }
+        if (rollbackErrors.length > 0) {
+          throw new AggregateError(
+            [operationError, ...rollbackErrors],
+            "Die Katalogveröffentlichung ist fehlgeschlagen und konnte nicht vollständig zurückgerollt werden. Die gespeicherte Referenz ermöglicht eine erneute Bereinigung über die Oberfläche."
+          );
+        }
+        throw operationError;
+      }
+      try {
+        await refreshCatalogedRoutes();
+      } catch {
+        // Publishing is complete; discovery will retry on the next load.
+      }
+    });
+
+  const removeDraftFromCatalog = (
+    item: TourDraft,
+    expectedPublication: RouteCatalogPublication
+  ) =>
+    mutate(async () => {
+      assertCurrentAuthContext();
+      if (!podConnected || !podRoot || !solidFetch || !webId) {
+        throw new Error("Für das Entfernen aus dem Katalog ist ein verbundener Solid Pod erforderlich.");
+      }
+
+      // Claim the cleanup in private state before deleting public resources.
+      // A conflicting tab either observes `publishing` and must not interfere,
+      // or loses this CAS and therefore never executes the external deletes.
+      let claimedPublication: RouteCatalogPublication | null = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const remoteSnapshot = await loadStateSnapshot(podRoot, solidFetch);
+        assertCurrentAuthContext();
+        const publication = remoteSnapshot.state.catalogPublications.find(
+          (candidate) => candidate.sourceDraftId === item.id
+        );
+        if (!publication) {
+          setState(remoteSnapshot.state);
+          return;
+        }
+        if (
+          !sameCatalogPublication(publication, expectedPublication) ||
+          !remoteSnapshot.etag
+        ) {
+          setState(remoteSnapshot.state);
+          throw new Error("Die Katalogveröffentlichung wurde zwischenzeitlich geändert.");
+        }
+        if (publication.phase === "publishing" && !catalogPhaseLeaseExpired(publication)) {
+          setState(remoteSnapshot.state);
+          throw new Error(
+            "Die Routenvorlage wird gerade veröffentlicht und kann noch nicht entfernt werden."
+          );
+        }
+        if (publication.phase === "updating" && !catalogPhaseLeaseExpired(publication)) {
+          setState(remoteSnapshot.state);
+          throw new Error("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
+        }
+        if (publication.phase === "removing") {
+          // Only a stale cleanup lease is recoverable. A fresh one belongs to
+          // the tab that won the CAS and must not be duplicated.
+          if (!catalogPhaseLeaseExpired(publication)) {
+            setState(remoteSnapshot.state);
+            throw new Error("Die Routenvorlage wird bereits in einem anderen Tab entfernt.");
+          }
+          claimedPublication = publication;
+          setState(remoteSnapshot.state);
+          break;
+        }
+
+        const removingPublication = {
+          ...publication,
+          phase: "removing" as const,
+          phaseChangedAt: new Date().toISOString(),
+        };
+        try {
+          const committed = await saveStateIfUnchanged(
+            podRoot,
+            {
+              ...remoteSnapshot.state,
+              catalogPublications: remoteSnapshot.state.catalogPublications.map(
+                (candidate) =>
+                  candidate.routeTemplateId === publication.routeTemplateId
+                    ? removingPublication
+                    : candidate
+              ),
+            },
+            remoteSnapshot.etag,
+            webId,
+            solidFetch
+          );
+          assertCurrentAuthContext();
+          setState(committed.state);
+          claimedPublication = removingPublication;
+          break;
+        } catch (reason) {
+          if (!isStateConflictError(reason) || attempt === 2) throw reason;
+        }
+      }
+
+      if (!claimedPublication) {
+        throw new Error("Die Katalogveröffentlichung konnte nicht zum Entfernen reserviert werden.");
+      }
+
+      const cleanupErrors: unknown[] = [];
+      try {
+        await removeCatalogEntry({
+          podRoot,
+          webId,
+          datasetIdentifier: claimedPublication.datasetIdentifier,
+          catalogDatasetUrl: claimedPublication.catalogDatasetUrl,
+          fetcher: solidFetch,
+        });
+      } catch (reason) {
+        cleanupErrors.push(reason);
+      }
+      try {
+        await setOwnerOnlyIfPresent(claimedPublication.resourceUrl, webId, solidFetch);
+      } catch (reason) {
+        cleanupErrors.push(reason);
+      }
+      try {
+        await safeDelete(claimedPublication.resourceUrl, solidFetch);
+      } catch (reason) {
+        cleanupErrors.push(reason);
+      }
+      assertCurrentAuthContext();
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          cleanupErrors,
+          "Die Routenvorlage konnte nicht vollständig entfernt werden. Die gespeicherte Referenz ermöglicht einen erneuten Bereinigungsversuch."
+        );
+      }
+
+      // Dropping the cleanup handle is the final commit. Re-read the private
+      // state and remove only the exact handle claimed above.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const latest = await loadStateSnapshot(podRoot, solidFetch);
+        assertCurrentAuthContext();
+        const authoritative = latest.state.catalogPublications.find(
+          (candidate) => candidate.routeTemplateId === claimedPublication.routeTemplateId
+        );
+        if (!authoritative) {
+          setState(latest.state);
+          return;
+        }
+        if (
+          !latest.etag ||
+          authoritative.phase !== "removing" ||
+          !sameCatalogPublication(authoritative, claimedPublication)
+        ) {
+          setState(latest.state);
+          throw new Error("Die Katalogbereinigung wurde zwischenzeitlich geändert.");
+        }
+        try {
+          const committed = await saveStateIfUnchanged(
+            podRoot,
+            {
+              ...latest.state,
+              catalogPublications: latest.state.catalogPublications.filter(
+                (candidate) =>
+                  candidate.routeTemplateId !== claimedPublication.routeTemplateId
+              ),
+            },
+            latest.etag,
+            webId,
+            solidFetch
+          );
+          assertCurrentAuthContext();
+          setState(committed.state);
+          try {
+            await refreshCatalogedRoutes();
+          } catch {
+            // Removal is complete; discovery will retry on the next load.
+          }
+          return;
+        } catch (reason) {
+          if (!isStateConflictError(reason) || attempt === 2) throw reason;
+        }
+      }
+    });
+
+  const adoptRouteFromCatalog = (route: CatalogedRoute) => {
+    if (editorHasPendingChanges()) {
+      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+      return;
+    }
+    mutate(async () => {
+      if (!availableCatalogRoutes.some(
+        (candidate) => candidate.datasetUrl === route.datasetUrl
+      )) {
+        setCatalogPreviewId(null);
+        return;
+      }
+      const adopted = adoptCatalogedRoute(route);
+      await persistDraft(adopted);
+      setCatalogPreviewId(null);
+    });
+  };
+
+  const confirmCatalogAction = () => {
+    const confirmation = catalogConfirmation;
+    if (!confirmation) return;
+    setCatalogConfirmation(null);
+    if (confirmation.kind === "index") {
+      indexDraftsInCatalog(confirmation.drafts);
+    } else {
+      removeDraftFromCatalog(confirmation.draft, confirmation.publication);
+    }
+  };
+
+  const editorHasPendingChanges = (): boolean => {
+    if (!isEditing) return false;
+    const storedDraft = state.drafts.find((item) => item.id === draft.id);
+    if (!storedDraft) return true;
+    return !sameDraftContent(storedDraft, draft);
+  };
+
+  const selectDraft = (selected: TourDraft) => {
+    if (selected.id === draft.id) return;
+    if (editorHasPendingChanges()) {
+      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+      return;
+    }
+    setDraft(cloneDraft(selected));
+    setIsEditing(false);
+    setError(null);
+  };
+
+  const selectDraftById = (draftId: string) => {
+    const selected = state.drafts.find((item) => item.id === draftId);
+    if (selected) selectDraft(selected);
+  };
+
+  const beginDraftEditing = () => {
+    const publication = state.catalogPublications.find(
+      (candidate) => candidate.sourceDraftId === draft.id
+    );
+    if (publication?.phase === "updating") {
+      if (!catalogPhaseLeaseExpired(publication)) {
+        setError("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
+        return;
+      }
+      const storedDraft = state.drafts.find((item) => item.id === draft.id);
+      if (!storedDraft || !publication.pendingUpdate) {
+        setError(
+          "Das ältere unterbrochene Update kann nicht automatisch fortgesetzt werden. Die gespeicherte Katalogreferenz kann sicher entfernt werden."
+        );
+        return;
+      }
+      void mutate(async () => {
+        const recoveredState = await persistCatalogedDraft(
+          cloneDraft(publication.pendingUpdate!.draft),
+          storedDraft,
+          publication
+        );
+        const recoveredDraft = recoveredState.drafts.find(
+          (item) => item.id === storedDraft.id
+        );
+        if (!recoveredDraft) {
+          throw new Error("Der wiederaufgenommene Tourentwurf fehlt im Pod-Status.");
+        }
+        setDraft(cloneDraft(recoveredDraft));
+        setIsEditing(true);
+      });
+      return;
+    }
+    if (publication && publication.phase !== "published") {
+      setError(
+        "Die Routenvorlage ist erst nach Abschluss der laufenden Katalogaktion wieder bearbeitbar."
+      );
+      return;
+    }
+    setIsEditing(true);
+    setError(null);
+  };
+
+  const beginNewDraft = () => {
+    if (editorHasPendingChanges()) {
+      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+      return;
+    }
+    const freshDraft = createGeneratedDraft();
+    setDraft(freshDraft);
+    setIsEditing(true);
+    setError(null);
+  };
+
+  const cancelDraftEditing = () => {
+    const storedDraft = state.drafts.find((item) => item.id === draft.id);
+    if (storedDraft) {
+      setDraft(cloneDraft(storedDraft));
+      setIsEditing(false);
+    } else if (state.drafts[0]) {
+      setDraft(cloneDraft(state.drafts[0]));
+      setIsEditing(false);
+    } else {
+      const freshDraft = createGeneratedDraft();
+      setDraft(freshDraft);
+      setIsEditing(true);
+    }
+    setError(null);
+  };
+
+  const duplicateDraft = (source: TourDraft) => {
+    if (editorHasPendingChanges()) {
+      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+      return;
+    }
     mutate(async () => {
       assertCurrentAuthContext();
       const timestamp = new Date().toISOString();
@@ -1487,8 +2891,17 @@ export default function App({
       };
       await persistDraft(copy);
     });
+  };
 
   const requestDraftRemoval = (item: TourDraft) => {
+    if (
+      state.catalogPublications.some(
+        (publication) => publication.sourceDraftId === item.id
+      )
+    ) {
+      setError("Entferne die Tour zuerst aus dem öffentlichen Routenkatalog.");
+      return;
+    }
     setDeleteConfirmation({ kind: "draft", item });
   };
 
@@ -1509,6 +2922,16 @@ export default function App({
           setState(remoteSnapshot.state);
           throw new Error(
             "Der Tourentwurf wurde im Pod zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen."
+          );
+        }
+        if (
+          remoteSnapshot.state.catalogPublications.some(
+            (publication) => publication.sourceDraftId === item.id
+          )
+        ) {
+          setState(remoteSnapshot.state);
+          throw new Error(
+            "Die Tour wurde zwischenzeitlich im öffentlichen Routenkatalog veröffentlicht. Entferne sie dort zuerst."
           );
         }
         if (!remoteSnapshot.etag) {
@@ -1573,7 +2996,15 @@ export default function App({
         }
         setState(committedSnapshot.state);
         if (draft.id === item.id) {
-          setDraft(committedSnapshot.state.drafts[0] || createGeneratedDraft());
+          const nextDraft = committedSnapshot.state.drafts[0];
+          if (nextDraft) {
+            setDraft(cloneDraft(nextDraft));
+            setIsEditing(false);
+          } else {
+            const freshDraft = createGeneratedDraft();
+            setDraft(freshDraft);
+            setIsEditing(true);
+          }
         }
         return;
       }
@@ -1585,7 +3016,17 @@ export default function App({
       };
       await persistStateForCurrentMode(next, state);
       setState(next);
-      if (draft.id === item.id) setDraft(next.drafts[0] || createGeneratedDraft());
+      if (draft.id === item.id) {
+        const nextDraft = next.drafts[0];
+        if (nextDraft) {
+          setDraft(cloneDraft(nextDraft));
+          setIsEditing(false);
+        } else {
+          const freshDraft = createGeneratedDraft();
+          setDraft(freshDraft);
+          setIsEditing(true);
+        }
+      }
     });
   };
 
@@ -1931,9 +3372,23 @@ export default function App({
           embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
         }`}
       >
-        <p className="tours-loading" role="status">
-          {t("loading")}
-        </p>
+        <main
+          className="tours-loading"
+          aria-busy="true"
+        >
+          <span className="tours-loading-mark" aria-hidden="true">
+            <FontAwesomeIcon icon="route" />
+          </span>
+          <h1>Solid Tours</h1>
+          <p role="status" aria-live="polite">{t("loading")}</p>
+          <span
+            className="tours-loading-rail"
+            role="progressbar"
+            aria-label={t("loading")}
+          >
+            <span />
+          </span>
+        </main>
       </div>
     );
   }
@@ -1960,7 +3415,50 @@ export default function App({
     );
   }
 
+  if (onboardingRequired && isAuthenticated && podRoot) {
+    return (
+      <div
+        className={`solid-tours-app solid-tours-app--onboarding ${
+          embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
+        }`}
+        lang={language}
+      >
+        <SolidToursOnboarding
+          context={embedded ? "embedded" : "standalone"}
+          language={language}
+          podRoot={podRoot}
+          registryOptions={onboardingRegistryOptions}
+          configuredPublicRegistries={onboardingPublicRegistries}
+          infrastructureReady={onboardingInfrastructureReady}
+          profileReady={onboardingProfileReady}
+          profilePublisher={onboardingProfileMetadata.publisher}
+          profileContactEmail={onboardingProfileMetadata.contactEmail}
+          busy={busy}
+          onComplete={completeAppOnboarding}
+          onLogout={embedded ? undefined : logout}
+        />
+        {error && (
+          <div className="map-error-overlay tours-onboarding-error" role="alert">
+            {localizeUserFacingMessage(error, language)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const mapRoutes = state.drafts.filter((item) => item.id !== draft.id);
+  const catalogPreview =
+    availableCatalogRoutes.find((route) => route.datasetUrl === catalogPreviewId) || null;
+  const uncatalogedDrafts = state.drafts.filter(
+    (item) =>
+      isDraftEligibleForCatalogPublication(item) &&
+      !state.catalogPublications.some(
+        (publication) => publication.sourceDraftId === item.id
+      )
+  );
+  const activeDraftPublication = state.catalogPublications.find(
+    (publication) => publication.sourceDraftId === draft.id
+  );
   const editablePointCount = draft.geometry.reduce((count, line) => count + line.length, 0);
   const visibleError = localizeUserFacingMessage(error, language);
 
@@ -1969,7 +3467,7 @@ export default function App({
       lang={language}
       className={`solid-tours-app ${
         embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
-      }${completeConfirmation || deleteConfirmation || completionInProgress ? " solid-tours-app--modal-open" : ""}`}
+      }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress ? " solid-tours-app--modal-open" : ""}`}
     >
       {!embedded && (
         <header className="app-header">
@@ -2020,9 +3518,7 @@ export default function App({
                     className="icon-button"
                     title={t("newTour")}
                     aria-label={t("newTour")}
-                    onClick={() => {
-                      setDraft(createGeneratedDraft());
-                    }}
+                    onClick={beginNewDraft}
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M12 5v14M5 12h14" />
@@ -2033,16 +3529,29 @@ export default function App({
                 <div className="form-grid">
                   <label>
                     {t("tourName")}
-                    <input value={draft.name} onChange={(event) => updateDraft("name", event.target.value)} />
+                    <input
+                      value={draft.name}
+                      disabled={busy || !isEditing}
+                      title={!isEditing ? t("editRoute") : undefined}
+                      onChange={(event) => updateDraft("name", event.target.value)}
+                    />
                   </label>
                 </div>
 
                 <div className="mode-row" aria-label={t("routeMode")}>
-                  <button className="active" type="button">{t("drawFreely")}</button>
+                  <button
+                    className="active"
+                    type="button"
+                    disabled={busy || !isEditing}
+                    title={!isEditing ? t("editRoute") : undefined}
+                  >
+                    {t("drawFreely")}
+                  </button>
                   <label className="file-button">
                     {t("importRoute")}
                     <input
                       type="file"
+                      disabled={busy || !isEditing}
                       accept=".gpx,.geojson,.json,application/gpx+xml,application/geo+json"
                       onChange={(event) => {
                         importFile(event.target.files?.[0]);
@@ -2052,7 +3561,45 @@ export default function App({
                   </label>
                 </div>
 
-                <button className="secondary save-draft-button" disabled={busy} onClick={handleSave}>{t("saveDraft")}</button>
+                {isEditing ? (
+                  <>
+                    {activeDraftPublication && (
+                      <p className="public-route-edit-hint">{t("publicRouteEditHint")}</p>
+                    )}
+                    <div className="editor-actions">
+                      <button
+                        className="secondary save-draft-button"
+                        disabled={busy}
+                        onClick={handleSave}
+                      >
+                        {state.drafts.some((item) => item.id === draft.id)
+                          ? t("saveChanges")
+                          : t("saveDraft")}
+                      </button>
+                      <button
+                        className="ghost cancel-edit-button"
+                        disabled={busy}
+                        onClick={cancelDraftEditing}
+                      >
+                        {t("cancelEditing")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    className="secondary edit-draft-button"
+                    disabled={
+                      busy ||
+                      activeDraftPublication?.phase === "publishing" ||
+                      activeDraftPublication?.phase === "removing" ||
+                      (activeDraftPublication?.phase === "updating" &&
+                        !catalogPhaseLeaseExpired(activeDraftPublication))
+                    }
+                    onClick={beginDraftEditing}
+                  >
+                    {t("editRoute")}
+                  </button>
+                )}
               </section>
 
               <section className="panel-section list-card">
@@ -2062,19 +3609,54 @@ export default function App({
                 </div>
                 <div className="item-list">
                   {state.drafts.length === 0 && <p className="empty">{t("noSavedTours")}</p>}
-                  {state.drafts.map((item) => (
-                    <article className={`draft-item ${item.id === draft.id ? "draft-item--active" : ""}`} key={item.id}>
-                      <button className="list-item" onClick={() => selectDraft(item)}>
-                        <span>{item.name}</span>
-                        <small>{distanceLabel(item.geometry, language)}</small>
-                      </button>
-                      <div className="draft-actions">
-                        <button className="ghost" disabled={busy} onClick={() => duplicateDraft(item)}>{t("duplicate")}</button>
-                        <button className="delete-link" disabled={busy} onClick={() => requestDraftRemoval(item)}>{t("delete")}</button>
-                      </div>
-                    </article>
-                  ))}
+                  {state.drafts.map((item) => {
+                    const publication = state.catalogPublications.find(
+                      (candidate) => candidate.sourceDraftId === item.id
+                    );
+                    return (
+                      <article className={`draft-item ${item.id === draft.id ? "draft-item--active" : ""}`} key={item.id}>
+                        <button
+                          className="list-item"
+                          aria-current={item.id === draft.id ? "true" : undefined}
+                          aria-label={t("selectRoute", { name: item.name })}
+                          onClick={() => selectDraft(item)}
+                        >
+                          <span>{item.name}</span>
+                          <small>
+                            {distanceLabel(item.geometry, language)}
+                            {publication
+                              ? ` · ${t(
+                                  publication.sourceDraftUpdatedAt === item.updatedAt
+                                    ? "cataloged"
+                                    : "catalogOutdated"
+                                )}`
+                              : ""}
+                          </small>
+                        </button>
+                        <div className="draft-actions draft-actions--catalog">
+                          <button className="ghost" disabled={busy} onClick={() => duplicateDraft(item)}>{t("duplicate")}</button>
+                          {podConnected && (
+                            publication ? (
+                              <button className="catalog-remove" disabled={busy} onClick={() => requestCatalogRemoval(item)}>{t("removeFromCatalog")}</button>
+                            ) : isDraftEligibleForCatalogPublication(item) ? (
+                              <button className="catalog-index" disabled={busy} onClick={() => requestCatalogIndex([item])}>{t("indexRoute")}</button>
+                            ) : null
+                          )}
+                          <button className="delete-link" disabled={busy} onClick={() => requestDraftRemoval(item)}>{t("delete")}</button>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
+                {podConnected && uncatalogedDrafts.length > 1 && (
+                  <button
+                    className="catalog-bulk-button"
+                    disabled={busy}
+                    onClick={() => requestCatalogIndex(uncatalogedDrafts)}
+                  >
+                    {t("indexUncatalogedTours")}
+                  </button>
+                )}
                 <div className="tour-completion">
                   <label>
                     {t("completedOn")}
@@ -2114,6 +3696,47 @@ export default function App({
                   <button className="primary" disabled={busy} onClick={confirmCompletion}>{t("tourDone")}</button>
                 </div>
               </section>
+
+              {podConnected && (
+                <section className="panel-section list-card catalog-routes-card">
+                  <div className="section-heading">
+                    <h2>{t("catalogedTours")}</h2>
+                    <strong className="count-badge">{availableCatalogRoutes.length}</strong>
+                  </div>
+                  <div className="item-list catalog-route-list">
+                    {catalogLoading && <p className="empty">{t("loadingCatalog")}</p>}
+                    {!catalogLoading && availableCatalogRoutes.length === 0 && (
+                      <p className="empty">{t("noCatalogedTours")}</p>
+                    )}
+                    {availableCatalogRoutes.map((route) => (
+                      <article
+                        className={`catalog-route-item${catalogPreviewId === route.datasetUrl ? " is-previewed" : ""}`}
+                        key={route.datasetUrl}
+                        onMouseEnter={() => setCatalogPreviewId(route.datasetUrl)}
+                        onMouseLeave={() => setCatalogPreviewId(null)}
+                        onFocus={() => setCatalogPreviewId(route.datasetUrl)}
+                        onBlur={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                            setCatalogPreviewId(null);
+                          }
+                        }}
+                      >
+                        <div>
+                          <strong>{route.name}</strong>
+                          <small>{distanceLabel(route.geometry, language)} · {route.publisher}</small>
+                        </div>
+                        <button
+                          className="catalog-adopt"
+                          disabled={busy}
+                          onClick={() => adoptRouteFromCatalog(route)}
+                        >
+                          {t("addToMyTours")}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section className="panel-section list-card">
                 <div className="section-heading">
@@ -2161,7 +3784,10 @@ export default function App({
             <TourMap
               geometry={draft.geometry}
               savedRoutes={mapRoutes}
+              catalogPreview={catalogPreview}
+              editable={isEditing}
               onPoint={addPoint}
+              onSelectRoute={selectDraftById}
               language={language}
             />
 
@@ -2187,7 +3813,7 @@ export default function App({
                 </button>
               </div>
             )}
-            {editablePointCount > 0 && (
+            {isEditing && editablePointCount > 0 && (
               <div className="map-edit-toolbar" role="toolbar" aria-label={t("editRoute")}>
                 <button className="map-tool-button" disabled={busy} onClick={undoPoint} title={t("undoLastPoint")}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2207,9 +3833,60 @@ export default function App({
               <strong>{t("routes")}</strong>
               <span><i className="legend-line legend-line--current" />{t("currentTour")}</span>
               <span><i className="legend-line legend-line--saved" />{t("savedTour")}</span>
+              <span><i className="legend-line legend-line--catalog" />{t("catalogPreview")}</span>
             </aside>
           </section>
         </section>
+
+      {catalogConfirmation && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            if (!busy) setCatalogConfirmation(null);
+          }}
+        >
+          <section
+            className={`confirm-dialog ${catalogConfirmation.kind === "remove" ? "confirm-dialog--danger" : "confirm-dialog--catalog"}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="catalog-confirmation-title"
+            aria-describedby="catalog-confirmation-copy"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="eyebrow">{t("publicRouteCatalog")}</span>
+            <h2 id="catalog-confirmation-title">
+              {catalogConfirmation.kind === "index"
+                ? t("indexRoutesTitle")
+                : t("removeCatalogRouteTitle")}
+            </h2>
+            <p id="catalog-confirmation-copy">
+              {catalogConfirmation.kind === "index"
+                ? t("indexRoutesQuestion", { count: catalogConfirmation.drafts.length })
+                : t("removeCatalogRouteQuestion", { name: catalogConfirmation.draft.name })}
+            </p>
+            {catalogConfirmation.kind === "index" && (
+              <ul className="catalog-confirmation-list">
+                {catalogConfirmation.drafts.map((item) => (
+                  <li key={item.id}>{item.name}</li>
+                ))}
+              </ul>
+            )}
+            <div className="dialog-actions">
+              <button className="ghost" disabled={busy} onClick={() => setCatalogConfirmation(null)}>
+                {t("cancel")}
+              </button>
+              <button
+                className={catalogConfirmation.kind === "remove" ? "danger" : "primary"}
+                disabled={busy}
+                onClick={confirmCatalogAction}
+              >
+                {catalogConfirmation.kind === "index" ? t("publishPublicly") : t("removeFromCatalog")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {deleteConfirmation && (
         <div

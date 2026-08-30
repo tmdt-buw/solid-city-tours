@@ -293,6 +293,7 @@ export function draftFeature(draft: TourDraft) {
       routeSource: draft.routeSource,
       durationMinutes: draft.durationMinutes,
       durationSource: draft.durationSource,
+      adoptedFromCatalog: draft.adoptedFromCatalog,
       createdAt: draft.createdAt,
       updatedAt: draft.updatedAt,
     },

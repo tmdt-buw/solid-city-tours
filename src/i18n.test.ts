@@ -5,6 +5,7 @@ import {
   normalizeToursLanguage,
   publishToursLanguage,
   readStoredToursLanguage,
+  translate,
   TOURS_LANGUAGE_EVENT,
   TOURS_LANGUAGE_STORAGE_KEY,
   writeStoredToursLanguage,
@@ -58,5 +59,41 @@ describe("Solid Tours language contract", () => {
         "en"
       )
     ).toBe("The action could not be completed safely. Please try again.");
+    expect(
+      localizeUserFacingMessage(
+        "Das unterbrochene Routenvorlagen-Update konnte noch nicht abgeschlossen werden. Der gespeicherte Zielstand kann erneut fortgesetzt werden.",
+        "en"
+      )
+    ).toBe(
+      "The interrupted route-template update could not be completed yet. Its saved target state can be resumed again."
+    );
+    expect(
+      localizeUserFacingMessage(
+        "Die Routenvorlage ist erst nach Abschluss der laufenden Katalogaktion wieder bearbeitbar.",
+        "en"
+      )
+    ).toBe(
+      "The route template can be edited again after the current catalog operation has finished."
+    );
+    expect(
+      localizeUserFacingMessage(
+        "Eine aus dem Routenkatalog übernommene Tour kann nicht erneut katalogisiert werden.",
+        "en"
+      )
+    ).toBe("A route adopted from the route catalog cannot be cataloged again.");
+  });
+
+  it("discloses all public Catalog identity metadata before route publication", () => {
+    const english = translate("en", "indexRoutesQuestion", { count: 3 });
+    expect(english).toContain("route name");
+    expect(english).toContain("publisher name");
+    expect(english).toContain("WebID as creator");
+    expect(english).toContain("contact email");
+
+    const german = translate("de", "indexRoutesQuestion", { count: 3 });
+    expect(german).toContain("Tourname");
+    expect(german).toContain("Publisher-Namen");
+    expect(german).toContain("WebID als Creator");
+    expect(german).toContain("Kontakt-E-Mail");
   });
 });

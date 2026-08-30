@@ -39,6 +39,7 @@ const state: ToursState = {
       },
     },
   ],
+  catalogPublications: [],
   activeRun: null,
 };
 
@@ -61,6 +62,7 @@ describe("browser-local tour state", () => {
       schemaVersion: 1,
       drafts: [],
       activities: [],
+      catalogPublications: [],
       activeRun: null,
     });
   });
@@ -88,6 +90,7 @@ describe("browser-local tour state", () => {
       schemaVersion: 1,
       drafts: [],
       activities: [],
+      catalogPublications: [],
       activeRun: null,
     });
   });
@@ -108,6 +111,7 @@ describe("browser-local tour state", () => {
       schemaVersion: 1,
       drafts: [],
       activities: [],
+      catalogPublications: [],
       activeRun: null,
     });
   });

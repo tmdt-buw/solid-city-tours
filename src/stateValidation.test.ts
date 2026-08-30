@@ -42,6 +42,157 @@ describe("destructive state validation", () => {
     );
   });
 
+  it("migrates legacy catalog publications to the published phase", () => {
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const sourceDraftId = "8db47d3b-8a4f-4a74-b086-77c1c7630bf7";
+    const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+    const publication = {
+      routeTemplateId,
+      sourceDraftId,
+      sourceDraftUpdatedAt: "2026-08-20T12:00:00.000Z",
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+      datasetIdentifier,
+      catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+
+    const state = validateToursState(podRoot, {
+      schemaVersion: 1,
+      drafts: [],
+      activities: [],
+      catalogPublications: [publication],
+      activeRun: null,
+    });
+
+    expect(state.catalogPublications).toEqual([
+      {
+        ...publication,
+        phase: "published",
+        phaseChangedAt: publication.publishedAt,
+      },
+    ]);
+  });
+
+  it.each(["publishing", "published", "updating", "removing"] as const)(
+    "accepts the %s catalog publication phase",
+    (phase) => {
+      const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+      const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+      const state = validateToursState(podRoot, {
+        schemaVersion: 1,
+        drafts: [],
+        activities: [],
+        catalogPublications: [
+          {
+            phase,
+            routeTemplateId,
+            sourceDraftId: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+            sourceDraftUpdatedAt: "2026-08-20T12:00:00.000Z",
+            resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+            datasetIdentifier,
+            catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+            publishedAt: "2026-08-20T14:00:00.000Z",
+          },
+        ],
+        activeRun: null,
+      });
+      expect(state.catalogPublications[0].phase).toBe(phase);
+      expect(state.catalogPublications[0].phaseChangedAt).toBe(
+        "2026-08-20T14:00:00.000Z"
+      );
+    }
+  );
+
+  it("preserves a valid resumable catalog update and binds it to its baseline draft", () => {
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const sourceDraftId = "8db47d3b-8a4f-4a74-b086-77c1c7630bf7";
+    const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+    const baseline = {
+      id: sourceDraftId,
+      name: "Old route",
+      routeSource: "drawn",
+      geometry: [[[7.1, 51.2], [7.2, 51.3]]],
+      createdAt: "2026-08-20T11:00:00.000Z",
+      updatedAt: "2026-08-20T12:00:00.000Z",
+    };
+    const pendingDraft = {
+      ...baseline,
+      name: "Updated route",
+      updatedAt: "2026-08-20T15:00:00.000Z",
+    };
+    const publication = {
+      phase: "updating",
+      phaseChangedAt: "2026-08-20T15:00:00.000Z",
+      routeTemplateId,
+      sourceDraftId,
+      sourceDraftUpdatedAt: baseline.updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+      datasetIdentifier,
+      catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+      pendingUpdate: {
+        operationId: "9be23928-bff4-49ad-981d-2a6d48fc3c20",
+        leaseId: "f8b321a2-f550-4e90-8f39-09e80eced0b3",
+        draft: pendingDraft,
+      },
+    };
+
+    const state = validateToursState(podRoot, {
+      schemaVersion: 1,
+      drafts: [baseline],
+      activities: [],
+      catalogPublications: [publication],
+      activeRun: null,
+    });
+
+    expect(state.catalogPublications[0].pendingUpdate).toEqual(publication.pendingUpdate);
+    expect(() =>
+      validateToursState(podRoot, {
+        ...state,
+        catalogPublications: [{ ...publication, phase: "published" }],
+      })
+    ).toThrow(/Format/);
+    expect(() =>
+      validateToursState(podRoot, {
+        ...state,
+        catalogPublications: [
+          {
+            ...publication,
+            pendingUpdate: {
+              ...publication.pendingUpdate,
+              draft: { ...pendingDraft, createdAt: "2026-08-19T11:00:00.000Z" },
+            },
+          },
+        ],
+      })
+    ).toThrow(/Katalogveröffentlichungen/);
+  });
+
+  it("rejects an unknown catalog publication phase", () => {
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+    expect(() =>
+      validateToursState(podRoot, {
+        schemaVersion: 1,
+        drafts: [],
+        activities: [],
+        catalogPublications: [
+          {
+            phase: "unknown",
+            routeTemplateId,
+            sourceDraftId: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+            sourceDraftUpdatedAt: "2026-08-20T12:00:00.000Z",
+            resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+            datasetIdentifier,
+            catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+            publishedAt: "2026-08-20T14:00:00.000Z",
+          },
+        ],
+        activeRun: null,
+      })
+    ).toThrow(/Format/);
+  });
+
   it("hydrates a legacy state with the canonical bulk activityIds field", () => {
     const { activityIds: _activityIds, ...base } = activeRun;
     const state = {
@@ -117,6 +268,69 @@ describe("destructive state validation", () => {
       updatedAt: "2026-08-20T12:00:00.000Z",
     });
     expect(migrated.activities[0]).toEqual(completedActivity);
+  });
+
+  it("preserves valid adopted Catalog provenance across state hydration", () => {
+    const draft = {
+      id: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+      name: "Adopted route",
+      routeSource: "geojson",
+      geometry: [[[7.1, 51.2], [7.2, 51.3]]],
+      adoptedFromCatalog: {
+        routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+        datasetUrl: "https://publisher.example/catalog/ds/route.ttl#it",
+        distributionUrl: "https://publisher.example/routes/route.geojson",
+      },
+      createdAt: "2026-08-20T12:00:00.000Z",
+      updatedAt: "2026-08-20T12:00:00.000Z",
+    };
+
+    const hydrated = validateToursState(podRoot, {
+      schemaVersion: 1,
+      drafts: [draft],
+      activities: [],
+      catalogPublications: [],
+      activeRun: null,
+    });
+    expect(hydrated.drafts[0]).toEqual(draft);
+
+    expect(() =>
+      validateToursState(podRoot, {
+        schemaVersion: 1,
+        drafts: [
+          {
+            ...draft,
+            adoptedFromCatalog: {
+              ...draft.adoptedFromCatalog,
+              datasetUrl: "not-an-absolute-url",
+            },
+          },
+        ],
+        activities: [],
+        catalogPublications: [],
+        activeRun: null,
+      })
+    ).toThrow(/Format/);
+  });
+
+  it("continues to hydrate legacy drafts that predate Catalog provenance", () => {
+    const legacyDraft = {
+      id: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+      name: "Legacy adopted route",
+      routeSource: "geojson",
+      geometry: [[[7.1, 51.2], [7.2, 51.3]]],
+      createdAt: "2026-08-20T12:00:00.000Z",
+      updatedAt: "2026-08-20T12:00:00.000Z",
+    };
+    const hydrated = validateToursState(podRoot, {
+      schemaVersion: 1,
+      drafts: [legacyDraft],
+      activities: [],
+      catalogPublications: [],
+      activeRun: null,
+    });
+
+    expect(hydrated.drafts[0]).toEqual(legacyDraft);
   });
 
   it("rejects a manipulated deletion target before reset", () => {

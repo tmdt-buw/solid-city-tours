@@ -26,6 +26,19 @@ export type CyclingSummary = {
 
 export type ActivitySummary = WalkingSummary | CyclingSummary;
 
+/**
+ * Stable provenance for a route copied from the public route catalog.
+ *
+ * The private draft keeps its own UUID and remains fully editable. These
+ * public identifiers are retained only so the same catalog entry is not
+ * offered for adoption again, including after the app is reloaded.
+ */
+export type AdoptedCatalogRouteReference = {
+  routeTemplateId: string;
+  datasetUrl: string;
+  distributionUrl: string;
+};
+
 export type TourDraft = {
   id: string;
   name: string;
@@ -33,6 +46,7 @@ export type TourDraft = {
   geometry: MultiLineCoordinates;
   durationMinutes?: number;
   durationSource?: DurationSource;
+  adoptedFromCatalog?: AdoptedCatalogRouteReference;
   createdAt: string;
   updatedAt: string;
 };
@@ -60,10 +74,28 @@ export type ActiveRun = {
   publishedAt: string;
 };
 
+export type RouteCatalogPublication = {
+  phase: "publishing" | "published" | "updating" | "removing";
+  phaseChangedAt: string;
+  routeTemplateId: string;
+  sourceDraftId: string;
+  sourceDraftUpdatedAt: string;
+  resourceUrl: string;
+  datasetIdentifier: string;
+  catalogDatasetUrl: string;
+  publishedAt: string;
+  pendingUpdate?: {
+    operationId: string;
+    leaseId: string;
+    draft: TourDraft;
+  };
+};
+
 export type ToursState = {
   schemaVersion: 1;
   drafts: TourDraft[];
   activities: CompletedActivity[];
+  catalogPublications: RouteCatalogPublication[];
   activeRun: ActiveRun | null;
 };
 

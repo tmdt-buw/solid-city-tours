@@ -5,12 +5,57 @@ import {
   MAX_PUBLISHED_ACTIVITIES,
   publishedFeature,
 } from "./domain";
-import type { ActiveRun, CompletedActivity, TourDraft, ToursState } from "./types";
+import { ROUTE_TEMPLATE_IDENTIFIER_PREFIX } from "./routeTemplates";
+import type {
+  ActiveRun,
+  AdoptedCatalogRouteReference,
+  CompletedActivity,
+  RouteCatalogPublication,
+  TourDraft,
+  ToursState,
+} from "./types";
 
 const validIsoDateTime = (value: unknown): value is string => {
   if (typeof value !== "string") return false;
   const parsed = new Date(value);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+};
+
+const validAbsoluteHttpUrl = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+};
+
+const normalizeAdoptedCatalogRouteReference = (
+  input: unknown
+): AdoptedCatalogRouteReference | null => {
+  const value = input as Record<string, unknown> | null;
+  if (
+    !value ||
+    Object.keys(value).length !== 3 ||
+    !Object.keys(value).every((key) =>
+      ["routeTemplateId", "datasetUrl", "distributionUrl"].includes(key)
+    ) ||
+    !isUuidV4(value.routeTemplateId) ||
+    !validAbsoluteHttpUrl(value.datasetUrl) ||
+    !validAbsoluteHttpUrl(value.distributionUrl)
+  ) {
+    return null;
+  }
+  return {
+    routeTemplateId: value.routeTemplateId,
+    datasetUrl: value.datasetUrl,
+    distributionUrl: value.distributionUrl,
+  };
 };
 
 /**
@@ -34,11 +79,17 @@ const normalizeDraft = (draft: unknown): TourDraft | null => {
   }
 
   const routeSource = value.routeSource === "osrm" ? "drawn" : value.routeSource;
+  const adoptedFromCatalog =
+    value.adoptedFromCatalog === undefined
+      ? undefined
+      : normalizeAdoptedCatalogRouteReference(value.adoptedFromCatalog);
+  if (adoptedFromCatalog === null) return null;
   const normalized: TourDraft = {
     id: value.id,
     name: value.name,
     routeSource: routeSource as TourDraft["routeSource"],
     geometry: value.geometry as TourDraft["geometry"],
+    ...(adoptedFromCatalog ? { adoptedFromCatalog } : {}),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   };
@@ -79,8 +130,75 @@ const normalizeActivity = (activity: unknown): CompletedActivity | null => {
   }
 };
 
-const validateStateCollections = (input: unknown): ToursState => {
-  const state = input as ToursState;
+const normalizeCatalogPublication = (
+  podRoot: string,
+  publication: unknown
+): RouteCatalogPublication | null => {
+  const value = publication as Record<string, unknown> | null;
+  if (
+    !value ||
+    !isUuidV4(value.routeTemplateId) ||
+    !isUuidV4(value.sourceDraftId) ||
+    !validIsoDateTime(value.sourceDraftUpdatedAt) ||
+    !validIsoDateTime(value.publishedAt)
+  ) {
+    return null;
+  }
+  const normalizedPodRoot = podRoot.endsWith("/") ? podRoot : `${podRoot}/`;
+  const datasetIdentifier = `${ROUTE_TEMPLATE_IDENTIFIER_PREFIX}${value.routeTemplateId}`;
+  const expected = {
+    resourceUrl: `${normalizedPodRoot}solid-tours/public/cataloged-routes/${value.routeTemplateId}.geojson`,
+    datasetIdentifier,
+    catalogDatasetUrl: `${normalizedPodRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+  };
+  const phase = value.phase === undefined ? "published" : value.phase;
+  const phaseChangedAt =
+    value.phaseChangedAt === undefined ? value.publishedAt : value.phaseChangedAt;
+  let pendingUpdate: RouteCatalogPublication["pendingUpdate"];
+  if (value.pendingUpdate !== undefined) {
+    const pending = value.pendingUpdate as Record<string, unknown> | null;
+    const pendingDraft = normalizeDraft(pending?.draft);
+    if (
+      phase !== "updating" ||
+      !pending ||
+      !isUuidV4(pending.operationId) ||
+      !isUuidV4(pending.leaseId) ||
+      !pendingDraft ||
+      pendingDraft.id !== value.sourceDraftId
+    ) {
+      return null;
+    }
+    pendingUpdate = {
+      operationId: pending.operationId as string,
+      leaseId: pending.leaseId as string,
+      draft: pendingDraft,
+    };
+  }
+  if (
+    !new Set(["publishing", "published", "updating", "removing"]).has(String(phase)) ||
+    !validIsoDateTime(phaseChangedAt) ||
+    value.resourceUrl !== expected.resourceUrl ||
+    value.datasetIdentifier !== expected.datasetIdentifier ||
+    value.catalogDatasetUrl !== expected.catalogDatasetUrl
+  ) {
+    return null;
+  }
+  return {
+    phase: phase as RouteCatalogPublication["phase"],
+    phaseChangedAt,
+    routeTemplateId: value.routeTemplateId,
+    sourceDraftId: value.sourceDraftId,
+    sourceDraftUpdatedAt: value.sourceDraftUpdatedAt,
+    resourceUrl: expected.resourceUrl,
+    datasetIdentifier: expected.datasetIdentifier,
+    catalogDatasetUrl: expected.catalogDatasetUrl,
+    publishedAt: value.publishedAt,
+    ...(pendingUpdate ? { pendingUpdate } : {}),
+  };
+};
+
+const validateStateCollections = (podRoot: string, input: unknown): ToursState => {
+  const state = input as ToursState & { catalogPublications?: unknown };
   if (
     !state ||
     state.schemaVersion !== 1 ||
@@ -91,13 +209,44 @@ const validateStateCollections = (input: unknown): ToursState => {
   }
   const drafts = state.drafts.map(normalizeDraft);
   const activities = state.activities.map(normalizeActivity);
-  if (drafts.some((draft) => draft === null) || activities.some((activity) => activity === null)) {
+  const rawPublications = state.catalogPublications === undefined ? [] : state.catalogPublications;
+  if (!Array.isArray(rawPublications)) {
     throw new Error("Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.");
+  }
+  const catalogPublications = rawPublications.map((publication) =>
+    normalizeCatalogPublication(podRoot, publication)
+  );
+  if (
+    drafts.some((draft) => draft === null) ||
+    activities.some((activity) => activity === null) ||
+    catalogPublications.some((publication) => publication === null)
+  ) {
+    throw new Error("Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.");
+  }
+  const publications = catalogPublications as RouteCatalogPublication[];
+  const validDrafts = drafts as TourDraft[];
+  if (
+    new Set(publications.map((publication) => publication.routeTemplateId)).size !== publications.length ||
+    new Set(publications.map((publication) => publication.sourceDraftId)).size !== publications.length ||
+    publications.some((publication) => {
+      const pendingDraft = publication.pendingUpdate?.draft;
+      if (!pendingDraft) return false;
+      const sourceDraft = validDrafts.find((draft) => draft.id === publication.sourceDraftId);
+      if (!sourceDraft || sourceDraft.updatedAt !== publication.sourceDraftUpdatedAt) return true;
+      return (
+        pendingDraft.id !== sourceDraft.id ||
+        pendingDraft.createdAt !== sourceDraft.createdAt ||
+        JSON.stringify(pendingDraft) === JSON.stringify(sourceDraft)
+      );
+    })
+  ) {
+    throw new Error("Der Solid-Tours-Status enthält ungültige Katalogveröffentlichungen.");
   }
   return {
     ...state,
-    drafts: drafts as TourDraft[],
+    drafts: validDrafts,
     activities: activities as CompletedActivity[],
+    catalogPublications: publications,
   };
 };
 
@@ -156,7 +305,7 @@ export function validateActiveRun(podRoot: string, activeRun: unknown): ActiveRu
 }
 
 export function validateToursState(podRoot: string, input: unknown): ToursState {
-  const state = validateStateCollections(input);
+  const state = validateStateCollections(podRoot, input);
   if (state.activeRun !== null) {
     const activeRun = validateActiveRun(podRoot, state.activeRun);
     if (!activeRun.activityIds.every((activityId) => state.activities.some((activity) => activity.id === activityId))) {
@@ -168,9 +317,12 @@ export function validateToursState(podRoot: string, input: unknown): ToursState 
 }
 
 export function validateLocalToursState(input: unknown): ToursState {
-  const state = validateStateCollections(input);
+  const state = validateStateCollections("https://solid-tours.local.invalid/", input);
   if (state.activeRun !== null) {
     throw new Error("Der gespeicherte Solid-Tours-Status darf keinen veröffentlichten Szenariolauf enthalten.");
+  }
+  if (state.catalogPublications.length > 0) {
+    throw new Error("Der lokale Solid-Tours-Status darf keine Katalogveröffentlichungen enthalten.");
   }
   return state;
 }

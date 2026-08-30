@@ -61,8 +61,16 @@
     min-height: 100dvh;
     padding: 0 20px;
     overflow-y: auto;
+    scrollbar-color: #7895b8 #e8eef6;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
     zoom: normal;
   }
+
+  .browser-safari .solid-tours-login::-webkit-scrollbar { width: 9px; height: 9px; }
+  .browser-safari .solid-tours-login::-webkit-scrollbar-track { border-radius: 999px; background: #e8eef6; }
+  .browser-safari .solid-tours-login::-webkit-scrollbar-thumb { border: 2px solid #e8eef6; border-radius: 999px; background: #7895b8; }
+  .browser-safari .solid-tours-login::-webkit-scrollbar-thumb:hover { background: #466b98; }
 }
 
 .solid-tours-login .solid-tours-login__language {

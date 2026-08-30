@@ -134,8 +134,8 @@ describe("private Pod layout", () => {
     const root = "https://pod.example/laura/";
     const urls = storageUrls(root);
     expect(storageAclPlan(root)).toEqual({
-      containers: [urls.tours, urls.drafts, urls.activities, urls.runs, urls.public],
-      masterResources: [urls.state, urls.interests],
+      containers: [urls.tours, urls.drafts, urls.activities, urls.runs, urls.public, urls.routeTemplates],
+      masterResources: [urls.state, urls.interests, urls.onboarding],
       containedResourceContainers: [urls.drafts, urls.activities],
       publicResources: [urls.marker],
     });
@@ -185,7 +185,7 @@ describe("private Pod layout", () => {
 
   it("loads a strong state ETag for an authenticated conditional update", async () => {
     const podRoot = "https://pod.example/hannah/";
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify(state), {
         status: 200,
@@ -297,7 +297,7 @@ describe("private Pod layout", () => {
   it("updates state with If-Match and verifies the resulting state and ETag", async () => {
     const podRoot = "https://pod.example/hannah/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
@@ -328,7 +328,7 @@ describe("private Pod layout", () => {
   it("aborts a conditional state update on a concurrent ETag conflict", async () => {
     const podRoot = "https://pod.example/hannah/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
@@ -350,7 +350,7 @@ describe("private Pod layout", () => {
   it("reconciles a lost PUT response when the intended state was committed server-side", async () => {
     const podRoot = "https://pod.example/reconciled/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
@@ -371,7 +371,7 @@ describe("private Pod layout", () => {
   it("creates an initially missing state only with If-None-Match", async () => {
     const podRoot = "https://pod.example/new-state/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
@@ -398,7 +398,7 @@ describe("private Pod layout", () => {
   it("uses the cached per-Pod ETag for ordinary state writers", async () => {
     const podRoot = "https://pod.example/existing-state/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const state = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const state = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -431,7 +431,7 @@ describe("private Pod layout", () => {
   it("does not reuse a refreshed ETag for a second save based on stale UI state after 412", async () => {
     const podRoot = "https://pod.example/stale-after-conflict/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const base = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const base = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const draftA = {
       id: "0c8744e7-3bd1-4968-8e57-460ff3b828dc",
       name: "Lokaler Entwurf",
@@ -480,7 +480,7 @@ describe("private Pod layout", () => {
   it("fails a second overlapping mutation that was derived from the first mutation's old base", async () => {
     const podRoot = "https://pod.example/overlapping-writers/";
     const ownerWebId = `${podRoot}profile/card#me`;
-    const base = { schemaVersion: 1 as const, drafts: [], activities: [], activeRun: null };
+    const base = { schemaVersion: 1 as const, drafts: [], activities: [], catalogPublications: [], activeRun: null };
     const draft = {
       id: "0c8744e7-3bd1-4968-8e57-460ff3b828dc",
       name: "Erster Entwurf",

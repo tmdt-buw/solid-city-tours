@@ -70,7 +70,8 @@ Three real Wuppertal GeoJSON tracks for testing the importer are available in
 their source, `© OpenStreetMap contributors` attribution and ODbL 1.0 license are documented in
 that directory and embedded in every file.
 
-The Catalog SDK dependency is pinned to `0.8.63` for privacy-safe restricted Catalog publication.
+The Catalog SDK dependency is pinned to `0.8.66` for fail-closed restricted publication and
+public route-template discovery.
 Local stack development can link the sibling Catalog `dist` package directly without changing the
 registry-based lockfile.
 

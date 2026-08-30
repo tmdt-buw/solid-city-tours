@@ -10,6 +10,15 @@ import {
 import { draftFeature, isUuidV4 } from "./domain";
 import { validateToursState } from "./stateValidation";
 import {
+  parseSolidToursOnboardingRecord,
+  type SolidToursOnboardingRecord,
+} from "./appOnboarding";
+import {
+  ROUTE_TEMPLATE_IDENTIFIER_PREFIX,
+  parseRouteTemplateSnapshot,
+  type RouteTemplateSnapshot,
+} from "./routeTemplates";
+import {
   setOwnerOnlyResourceAccess,
   setOwnerPublicReadResourceAccess,
 } from "./ownerAcl";
@@ -21,6 +30,7 @@ export const EMPTY_STATE: ToursState = {
   schemaVersion: 1,
   drafts: [],
   activities: [],
+  catalogPublications: [],
   activeRun: null,
 };
 
@@ -145,7 +155,9 @@ export function storageUrls(podRoot: string) {
     activities: `${tours}activities/`,
     runs: `${tours}runs/`,
     public: `${tours}public/`,
+    routeTemplates: `${tours}public/cataloged-routes/`,
     state: `${tours}state.json`,
+    onboarding: `${tours}onboarding.json`,
     interests: `${tours}interests.ttl`,
     marker: `${tours}public/current-run.json`,
   };
@@ -154,8 +166,8 @@ export function storageUrls(podRoot: string) {
 export function storageAclPlan(podRoot: string) {
   const urls = storageUrls(podRoot);
   return {
-    containers: [urls.tours, urls.drafts, urls.activities, urls.runs, urls.public],
-    masterResources: [urls.state, urls.interests],
+    containers: [urls.tours, urls.drafts, urls.activities, urls.runs, urls.public, urls.routeTemplates],
+    masterResources: [urls.state, urls.interests, urls.onboarding],
     containedResourceContainers: [urls.drafts, urls.activities],
     publicResources: [urls.marker],
   } as const;
@@ -306,6 +318,65 @@ export async function putPublicJson(
   await setOwnerPublicReadResourceAccess(url, ownerWebId, fetcher);
 }
 
+export async function putPublicGeoJson(
+  url: string,
+  value: unknown,
+  ownerWebId: string,
+  fetcher: SolidFetch
+) {
+  await setOwnerOnlyIfPresent(url, ownerWebId, fetcher);
+  await writeBlob(url, `${JSON.stringify(value, null, 2)}\n`, "application/geo+json", fetcher);
+  await setOwnerPublicReadResourceAccess(url, ownerWebId, fetcher);
+}
+
+export async function loadSolidToursOnboarding(
+  podRoot: string,
+  fetcher: SolidFetch
+): Promise<SolidToursOnboardingRecord | null> {
+  const url = storageUrls(podRoot).onboarding;
+  const response = await fetcher(url, {
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    cache: "no-store",
+    redirect: "error",
+  });
+  assertExactResponseUrl(response, url, "Die Solid-Tours-Onboarding-Abfrage");
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Das Solid-Tours-Onboarding konnte nicht geladen werden (${response.status}).`);
+  }
+  try {
+    return parseSolidToursOnboardingRecord(await response.json());
+  } catch {
+    // A malformed or unsupported private record must never be interpreted as
+    // consent. Returning the same incomplete state as a missing record lets
+    // the UI safely show the current onboarding and repair it after explicit
+    // confirmation instead of locking the user out permanently.
+    return null;
+  }
+}
+
+export async function saveSolidToursOnboarding(
+  podRoot: string,
+  record: SolidToursOnboardingRecord,
+  ownerWebId: string,
+  fetcher: SolidFetch
+): Promise<void> {
+  const validated = parseSolidToursOnboardingRecord(record);
+  if (!validated) throw new Error("Das Solid-Tours-Onboarding hat ein ungültiges Format.");
+  await putPrivateJson(storageUrls(podRoot).onboarding, validated, ownerWebId, fetcher);
+}
+
+export async function savePublicRouteTemplate(
+  podRoot: string,
+  snapshot: RouteTemplateSnapshot,
+  ownerWebId: string,
+  fetcher: SolidFetch
+): Promise<string> {
+  const resourceUrl = `${storageUrls(podRoot).routeTemplates}${snapshot.properties.routeTemplateId}.geojson`;
+  await putPublicGeoJson(resourceUrl, snapshot, ownerWebId, fetcher);
+  return resourceUrl;
+}
+
 export type StateSnapshot = {
   state: ToursState;
   etag: string | null;
@@ -340,6 +411,341 @@ function strongEtag(response: Response): string | null {
 function assertExactResponseUrl(response: Response, expectedUrl: string, operation: string): void {
   if (response.url && new URL(response.url).href !== new URL(expectedUrl).href) {
     throw new Error(`${operation} antwortete für ein anderes Ziel.`);
+  }
+}
+
+function assertRequiredExactResponseUrl(
+  response: Response,
+  expectedUrl: string,
+  operation: string
+): void {
+  if (!response.url || new URL(response.url).href !== new URL(expectedUrl).href) {
+    throw new Error(`${operation} antwortete für ein anderes Ziel.`);
+  }
+}
+
+export type PublicRouteTemplateResourceSnapshot = {
+  resourceUrl: string;
+  snapshot: RouteTemplateSnapshot;
+  etag: string;
+};
+
+export type PublicRouteTemplateUpdateResult = {
+  previous: PublicRouteTemplateResourceSnapshot;
+  current: PublicRouteTemplateResourceSnapshot;
+};
+
+export class PublicRouteTemplateConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublicRouteTemplateConflictError";
+  }
+}
+
+export function isPublicRouteTemplateConflictError(
+  error: unknown
+): error is PublicRouteTemplateConflictError {
+  return error instanceof PublicRouteTemplateConflictError;
+}
+
+function exactPublicRouteTemplateResourceUrl(
+  podRoot: string,
+  resourceUrl: string,
+  expectedRouteTemplateId: string
+): string {
+  if (!isUuidV4(expectedRouteTemplateId)) {
+    throw new Error("Die erwartete Routenvorlagen-ID ist ungültig.");
+  }
+  const expectedUrl = `${
+    storageUrls(normalizeResolvedPodRoot(podRoot)).routeTemplates
+  }${expectedRouteTemplateId}.geojson`;
+  let normalizedResourceUrl: string;
+  try {
+    normalizedResourceUrl = new URL(resourceUrl).href;
+  } catch {
+    throw new Error("Die öffentliche Routenvorlagen-URL ist ungültig.");
+  }
+  if (normalizedResourceUrl !== expectedUrl) {
+    throw new Error(
+      "Die öffentliche Routenvorlagen-URL entspricht nicht der erwarteten Resource."
+    );
+  }
+  return expectedUrl;
+}
+
+function canonicalRouteTemplateSnapshot(
+  snapshot: RouteTemplateSnapshot,
+  expectedRouteTemplateId: string
+): RouteTemplateSnapshot {
+  return parseRouteTemplateSnapshot(
+    snapshot,
+    `${ROUTE_TEMPLATE_IDENTIFIER_PREFIX}${expectedRouteTemplateId}`
+  );
+}
+
+function assertStrongEtagValue(etag: string, label: string): void {
+  if (
+    !etag ||
+    etag.toUpperCase().startsWith("W/") ||
+    !etag.startsWith('"') ||
+    !etag.endsWith('"') ||
+    /[\r\n]/.test(etag)
+  ) {
+    throw new Error(`${label} besitzt keinen starken Versionsnachweis.`);
+  }
+}
+
+export async function loadPublicRouteTemplateResourceSnapshot(
+  podRoot: string,
+  resourceUrl: string,
+  expectedRouteTemplateId: string,
+  fetcher: SolidFetch
+): Promise<PublicRouteTemplateResourceSnapshot> {
+  const exactResourceUrl = exactPublicRouteTemplateResourceUrl(
+    podRoot,
+    resourceUrl,
+    expectedRouteTemplateId
+  );
+  const response = await fetcher(exactResourceUrl, {
+    headers: {
+      Accept: "application/geo+json, application/json;q=0.9",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+    cache: "no-store",
+    redirect: "error",
+  });
+  assertRequiredExactResponseUrl(
+    response,
+    exactResourceUrl,
+    "Die öffentliche Routenvorlagen-Abfrage"
+  );
+  if (response.status === 404) {
+    throw new Error("Die öffentliche Routenvorlage ist nicht mehr vorhanden.");
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Die öffentliche Routenvorlage konnte nicht geladen werden (${response.status}).`
+    );
+  }
+  const snapshot = canonicalRouteTemplateSnapshot(
+    await response.json(),
+    expectedRouteTemplateId
+  );
+  const etag = strongEtag(response);
+  if (!etag) {
+    throw new Error(
+      "Die öffentliche Routenvorlage besitzt keinen starken Versionsnachweis."
+    );
+  }
+  return { resourceUrl: exactResourceUrl, snapshot, etag };
+}
+
+function validateExpectedPublicRouteTemplateSnapshot(
+  podRoot: string,
+  expectedRouteTemplateId: string,
+  expected: PublicRouteTemplateResourceSnapshot
+): PublicRouteTemplateResourceSnapshot {
+  const resourceUrl = exactPublicRouteTemplateResourceUrl(
+    podRoot,
+    expected.resourceUrl,
+    expectedRouteTemplateId
+  );
+  const snapshot = canonicalRouteTemplateSnapshot(
+    expected.snapshot,
+    expectedRouteTemplateId
+  );
+  assertStrongEtagValue(expected.etag, "Die erwartete öffentliche Routenvorlage");
+  return { resourceUrl, snapshot, etag: expected.etag };
+}
+
+function sameRouteTemplateSnapshot(
+  left: RouteTemplateSnapshot,
+  right: RouteTemplateSnapshot
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+async function verifyUpdatedPublicRouteTemplate(
+  podRoot: string,
+  resourceUrl: string,
+  expectedRouteTemplateId: string,
+  expectedSnapshot: RouteTemplateSnapshot,
+  ownerWebId: string,
+  fetcher: SolidFetch,
+  previous: PublicRouteTemplateResourceSnapshot
+): Promise<PublicRouteTemplateUpdateResult> {
+  const written = await loadPublicRouteTemplateResourceSnapshot(
+    podRoot,
+    resourceUrl,
+    expectedRouteTemplateId,
+    fetcher
+  );
+  if (!sameRouteTemplateSnapshot(written.snapshot, expectedSnapshot)) {
+    throw new PublicRouteTemplateConflictError(
+      "Die öffentliche Routenvorlage entspricht nicht dem beabsichtigten Update."
+    );
+  }
+
+  // Do not make the existing resource private before replacing it. Reasserting
+  // this strict ACL after the conditional PUT also verifies that public access
+  // is read-only and that only the owner retains write/control access.
+  await setOwnerPublicReadResourceAccess(resourceUrl, ownerWebId, fetcher);
+
+  const verified = await loadPublicRouteTemplateResourceSnapshot(
+    podRoot,
+    resourceUrl,
+    expectedRouteTemplateId,
+    fetcher
+  );
+  if (!sameRouteTemplateSnapshot(verified.snapshot, expectedSnapshot)) {
+    throw new PublicRouteTemplateConflictError(
+      "Die öffentliche Routenvorlage wurde während der ACL-Prüfung verändert."
+    );
+  }
+  return { previous, current: verified };
+}
+
+async function reconcilePublicRouteTemplateUpdate(
+  podRoot: string,
+  resourceUrl: string,
+  expectedRouteTemplateId: string,
+  expectedSnapshot: RouteTemplateSnapshot,
+  ownerWebId: string,
+  fetcher: SolidFetch,
+  previous: PublicRouteTemplateResourceSnapshot,
+  originalError: unknown
+): Promise<PublicRouteTemplateUpdateResult> {
+  try {
+    return await verifyUpdatedPublicRouteTemplate(
+      podRoot,
+      resourceUrl,
+      expectedRouteTemplateId,
+      expectedSnapshot,
+      ownerWebId,
+      fetcher,
+      previous
+    );
+  } catch (reconciliationError) {
+    throw new AggregateError(
+      [originalError, reconciliationError],
+      "Das Update der öffentlichen Routenvorlage konnte nicht eindeutig bestätigt werden."
+    );
+  }
+}
+
+export async function updatePublicRouteTemplateConditionally(
+  podRoot: string,
+  resourceUrl: string,
+  expectedRouteTemplateId: string,
+  nextSnapshot: RouteTemplateSnapshot,
+  ownerWebId: string,
+  fetcher: SolidFetch,
+  expectedCurrent?: PublicRouteTemplateResourceSnapshot
+): Promise<PublicRouteTemplateUpdateResult> {
+  const exactResourceUrl = exactPublicRouteTemplateResourceUrl(
+    podRoot,
+    resourceUrl,
+    expectedRouteTemplateId
+  );
+  const canonicalNext = canonicalRouteTemplateSnapshot(
+    nextSnapshot,
+    expectedRouteTemplateId
+  );
+  const observed = await loadPublicRouteTemplateResourceSnapshot(
+    podRoot,
+    exactResourceUrl,
+    expectedRouteTemplateId,
+    fetcher
+  );
+  if (expectedCurrent) {
+    const validatedExpected = validateExpectedPublicRouteTemplateSnapshot(
+      podRoot,
+      expectedRouteTemplateId,
+      expectedCurrent
+    );
+    if (
+      observed.etag !== validatedExpected.etag ||
+      !sameRouteTemplateSnapshot(observed.snapshot, validatedExpected.snapshot)
+    ) {
+      throw new PublicRouteTemplateConflictError(
+        "Die öffentliche Routenvorlage wurde zwischenzeitlich verändert."
+      );
+    }
+  }
+
+  let response: Response;
+  try {
+    response = await fetcher(exactResourceUrl, {
+      method: "PUT",
+      cache: "no-store",
+      redirect: "error",
+      headers: {
+        "Content-Type": "application/geo+json",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        "If-Match": observed.etag,
+      },
+      body: `${JSON.stringify(canonicalNext, null, 2)}\n`,
+    });
+  } catch (writeError) {
+    return reconcilePublicRouteTemplateUpdate(
+      podRoot,
+      exactResourceUrl,
+      expectedRouteTemplateId,
+      canonicalNext,
+      ownerWebId,
+      fetcher,
+      observed,
+      writeError
+    );
+  }
+  assertRequiredExactResponseUrl(
+    response,
+    exactResourceUrl,
+    "Das Update der öffentlichen Routenvorlage"
+  );
+  if (response.status === 409 || response.status === 412) {
+    throw new PublicRouteTemplateConflictError(
+      "Die öffentliche Routenvorlage wurde zwischenzeitlich verändert."
+    );
+  }
+  if (!response.ok) {
+    return reconcilePublicRouteTemplateUpdate(
+      podRoot,
+      exactResourceUrl,
+      expectedRouteTemplateId,
+      canonicalNext,
+      ownerWebId,
+      fetcher,
+      observed,
+      new Error(
+        `Die öffentliche Routenvorlage konnte nicht gespeichert werden (${response.status}).`
+      )
+    );
+  }
+
+  try {
+    return await verifyUpdatedPublicRouteTemplate(
+      podRoot,
+      exactResourceUrl,
+      expectedRouteTemplateId,
+      canonicalNext,
+      ownerWebId,
+      fetcher,
+      observed
+    );
+  } catch (postWriteError) {
+    return reconcilePublicRouteTemplateUpdate(
+      podRoot,
+      exactResourceUrl,
+      expectedRouteTemplateId,
+      canonicalNext,
+      ownerWebId,
+      fetcher,
+      observed,
+      postWriteError
+    );
   }
 }
 
@@ -556,6 +962,17 @@ export async function saveDraft(
 
 type PrivateGeoJsonSnapshot = { etag: string };
 
+export type PrivateDraftMasterSnapshot = PrivateGeoJsonSnapshot & {
+  draft: TourDraft;
+};
+
+class InvalidPrivateDraftMasterError extends Error {
+  constructor() {
+    super("Der private Tourentwurf hat ein ungültiges oder unerwartetes Format.");
+    this.name = "InvalidPrivateDraftMasterError";
+  }
+}
+
 export class PrivateResourceConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -616,6 +1033,7 @@ const DRAFT_PROPERTY_KEYS = new Set([
   "routeSource",
   "durationMinutes",
   "durationSource",
+  "adoptedFromCatalog",
   "createdAt",
   "updatedAt",
 ]);
@@ -635,7 +1053,7 @@ const containsOnlyKeys = (value: Record<string, unknown>, allowed: Set<string>) 
  * fails the comparison below, so this compatibility path cannot overwrite a
  * concurrent or foreign edit.
  */
-function canonicalStoredDraftFeature(value: unknown): ReturnType<typeof draftFeature> | null {
+function canonicalStoredDraft(value: unknown): TourDraft | null {
   if (!isPlainRecord(value) || !containsOnlyKeys(value, DRAFT_FEATURE_KEYS)) return null;
   if (value.type !== "Feature" || !isPlainRecord(value.geometry) || !isPlainRecord(value.properties)) {
     return null;
@@ -682,6 +1100,7 @@ function canonicalStoredDraftFeature(value: unknown): ReturnType<typeof draftFea
           geometry: value.geometry.coordinates,
           durationMinutes: properties.durationMinutes,
           durationSource: properties.durationSource,
+          adoptedFromCatalog: properties.adoptedFromCatalog,
           createdAt: properties.createdAt,
           updatedAt: properties.updatedAt,
         },
@@ -689,7 +1108,7 @@ function canonicalStoredDraftFeature(value: unknown): ReturnType<typeof draftFea
       activities: [],
       activeRun: null,
     }).drafts[0];
-    return draftFeature(normalized);
+    return normalized;
   } catch {
     return null;
   }
@@ -756,12 +1175,15 @@ async function writePrivateGeoJsonConditionally(
   }
 }
 
-export async function loadDraftMasterSnapshot(
+export async function loadDraftMasterResourceSnapshot(
   podRoot: string,
-  draft: TourDraft,
+  draftId: string,
   fetcher: SolidFetch
-): Promise<PrivateGeoJsonSnapshot> {
-  const resourceUrl = `${storageUrls(podRoot).drafts}${draft.id}.geojson`;
+): Promise<PrivateDraftMasterSnapshot> {
+  if (!isUuidV4(draftId)) {
+    throw new Error("Die private Tourentwurfs-ID ist ungültig.");
+  }
+  const resourceUrl = `${storageUrls(normalizeResolvedPodRoot(podRoot)).drafts}${draftId}.geojson`;
   const response = await fetcher(resourceUrl, {
     headers: { Accept: "application/geo+json", "Cache-Control": "no-cache" },
     cache: "no-store",
@@ -772,13 +1194,33 @@ export async function loadDraftMasterSnapshot(
   if (!response.ok) {
     throw new Error(`Der private Tourentwurf konnte nicht geladen werden (${response.status}).`);
   }
-  const stored = canonicalStoredDraftFeature(await response.json());
-  if (!stored || JSON.stringify(stored) !== JSON.stringify(draftFeature(draft))) {
-    throw new Error("Der private Tourentwurf wurde zwischenzeitlich geändert.");
+  const stored = canonicalStoredDraft(await response.json());
+  if (!stored || stored.id !== draftId) {
+    throw new InvalidPrivateDraftMasterError();
   }
   const etag = strongEtag(response);
   if (!etag) throw new Error("Der private Tourentwurf besitzt keinen starken Versionsnachweis.");
-  return { etag };
+  return { draft: stored, etag };
+}
+
+export async function loadDraftMasterSnapshot(
+  podRoot: string,
+  draft: TourDraft,
+  fetcher: SolidFetch
+): Promise<PrivateGeoJsonSnapshot> {
+  let stored: PrivateDraftMasterSnapshot;
+  try {
+    stored = await loadDraftMasterResourceSnapshot(podRoot, draft.id, fetcher);
+  } catch (error) {
+    if (error instanceof InvalidPrivateDraftMasterError) {
+      throw new Error("Der private Tourentwurf wurde zwischenzeitlich geändert.");
+    }
+    throw error;
+  }
+  if (JSON.stringify(draftFeature(stored.draft)) !== JSON.stringify(draftFeature(draft))) {
+    throw new Error("Der private Tourentwurf wurde zwischenzeitlich geändert.");
+  }
+  return { etag: stored.etag };
 }
 
 export async function saveDraftConditionally(

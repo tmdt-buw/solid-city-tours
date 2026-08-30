@@ -21,17 +21,67 @@ const leafletMocks = vi.hoisted(() => {
 
   const tileLayer = { addTo: vi.fn() };
   tileLayer.addTo.mockReturnValue(tileLayer);
-  const routeLayer = { addTo: vi.fn() };
-  routeLayer.addTo.mockReturnValue(routeLayer);
+  const routeLayers: Array<{
+    options: Record<string, unknown>;
+    addTo: ReturnType<typeof vi.fn>;
+    bindTooltip: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+    click: ReturnType<typeof vi.fn>;
+  }> = [];
+  const dispatchMapClick = (event: unknown) => {
+    const registration = (map.on.mock.calls as unknown[][]).find(
+      ([eventName]) => eventName === "click"
+    );
+    const handler = registration?.[1] as ((event: unknown) => void) | undefined;
+    handler?.(event);
+  };
+  const createRouteLayer = (options: Record<string, unknown> = {}) => {
+    const clickHandlers: Array<(event: unknown) => void> = [];
+    const layer = {
+      options,
+      addTo: vi.fn(),
+      bindTooltip: vi.fn(),
+      on: vi.fn(),
+      click: vi.fn(),
+    };
+    layer.addTo.mockReturnValue(layer);
+    layer.bindTooltip.mockReturnValue(layer);
+    layer.on.mockImplementation((eventName: string, handler: (event: unknown) => void) => {
+      if (eventName === "click") clickHandlers.push(handler);
+      return layer;
+    });
+    layer.click.mockImplementation((event: unknown) => {
+      // Leaflet's SVG renderer lets clicks pass through non-interactive paths.
+      // Interactive paths receive the event and only bubble to the map when
+      // bubblingMouseEvents has not explicitly been disabled.
+      if (options.interactive === false) {
+        dispatchMapClick(event);
+        return layer;
+      }
+      clickHandlers.forEach((handler) => handler(event));
+      if (options.bubblingMouseEvents !== false) dispatchMapClick(event);
+      return layer;
+    });
+    routeLayers.push(layer);
+    return layer;
+  };
   const zoomControl = { addTo: vi.fn(), remove: vi.fn() };
   zoomControl.addTo.mockReturnValue(zoomControl);
+  const circleMarkerFactory = vi.fn(
+    (_coordinates: unknown, options: Record<string, unknown> = {}) => createRouteLayer(options)
+  );
+  const polylineFactory = vi.fn(
+    (_coordinates: unknown, options: Record<string, unknown> = {}) => createRouteLayer(options)
+  );
 
   return {
     map,
     overlay,
     tileLayer,
-    routeLayer,
+    routeLayers,
     zoomControl,
+    circleMarkerFactory,
+    polylineFactory,
     zoomControlFactory: vi.fn(() => zoomControl),
     mapFactory: vi.fn(() => map),
   };
@@ -39,12 +89,12 @@ const leafletMocks = vi.hoisted(() => {
 
 vi.mock("leaflet", () => ({
   default: {
-    circleMarker: vi.fn(() => leafletMocks.routeLayer),
+    circleMarker: leafletMocks.circleMarkerFactory,
     control: { zoom: leafletMocks.zoomControlFactory },
     latLngBounds: vi.fn((points) => points),
     layerGroup: vi.fn(() => leafletMocks.overlay),
     map: leafletMocks.mapFactory,
-    polyline: vi.fn(() => leafletMocks.routeLayer),
+    polyline: leafletMocks.polylineFactory,
     tileLayer: vi.fn(() => leafletMocks.tileLayer),
   },
 }));
@@ -77,6 +127,9 @@ const podNetworkMocks = vi.hoisted(() => ({
   loadState: vi.fn(),
   loadActivityMasterSnapshot: vi.fn(),
   loadDraftMasterSnapshot: vi.fn(),
+  loadDraftMasterResourceSnapshot: vi.fn(),
+  loadPublicRouteTemplateResourceSnapshot: vi.fn(),
+  loadSolidToursOnboarding: vi.fn(),
   loadStateSnapshot: vi.fn(),
   clearPublishedMarker: vi.fn(),
   deleteActivity: vi.fn(),
@@ -88,7 +141,10 @@ const podNetworkMocks = vi.hoisted(() => ({
   saveActivityConditionally: vi.fn(),
   saveDraftConditionally: vi.fn(),
   saveInterestsIfMissing: vi.fn(),
+  savePublicRouteTemplate: vi.fn(),
+  updatePublicRouteTemplateConditionally: vi.fn(),
   saveRunSnapshot: vi.fn(),
+  saveSolidToursOnboarding: vi.fn(),
   saveState: vi.fn(),
   saveStateIfUnchanged: vi.fn(),
   writePublishedMarker: vi.fn(),
@@ -105,6 +161,10 @@ vi.mock("./solidStorage", async () => {
     loadState: podNetworkMocks.loadState,
     loadActivityMasterSnapshot: podNetworkMocks.loadActivityMasterSnapshot,
     loadDraftMasterSnapshot: podNetworkMocks.loadDraftMasterSnapshot,
+    loadDraftMasterResourceSnapshot: podNetworkMocks.loadDraftMasterResourceSnapshot,
+    loadPublicRouteTemplateResourceSnapshot:
+      podNetworkMocks.loadPublicRouteTemplateResourceSnapshot,
+    loadSolidToursOnboarding: podNetworkMocks.loadSolidToursOnboarding,
     loadStateSnapshot: podNetworkMocks.loadStateSnapshot,
     clearPublishedMarker: podNetworkMocks.clearPublishedMarker,
     deleteActivity: podNetworkMocks.deleteActivity,
@@ -116,7 +176,11 @@ vi.mock("./solidStorage", async () => {
     saveActivityConditionally: podNetworkMocks.saveActivityConditionally,
     saveDraftConditionally: podNetworkMocks.saveDraftConditionally,
     saveInterestsIfMissing: podNetworkMocks.saveInterestsIfMissing,
+    savePublicRouteTemplate: podNetworkMocks.savePublicRouteTemplate,
+    updatePublicRouteTemplateConditionally:
+      podNetworkMocks.updatePublicRouteTemplateConditionally,
     saveRunSnapshot: podNetworkMocks.saveRunSnapshot,
+    saveSolidToursOnboarding: podNetworkMocks.saveSolidToursOnboarding,
     saveState: podNetworkMocks.saveState,
     saveStateIfUnchanged: podNetworkMocks.saveStateIfUnchanged,
     writePublishedMarker: podNetworkMocks.writePublishedMarker,
@@ -133,10 +197,22 @@ const catalogMocks = vi.hoisted(() => ({
     };
   }),
   publishCatalogEntry: vi.fn(),
+  publishRouteTemplateCatalogEntry: vi.fn(),
+  updateRouteTemplateCatalogEntry: vi.fn(),
+  discoverCatalogedRoutes: vi.fn(),
+  ensureRouteCatalogReadiness: vi.fn(),
+  getCatalogedRouteDiscoveryReport: vi.fn(() => null),
+  loadPublicRegistryOptions: vi.fn(),
+  loadRouteCatalogReadiness: vi.fn(),
+  loadCatalogProfileMetadata: vi.fn(),
+  saveCatalogProfileMetadata: vi.fn(),
   removeCatalogEntry: vi.fn(),
 }));
 
 const accessRequestMocks = vi.hoisted(() => ({
+  ensureSolidToursInbox: vi.fn(),
+  getSolidToursInboxReadiness: vi.fn(),
+  resolveSolidInbox: vi.fn(),
   revokeAndArchiveScenarioAccess: vi.fn(),
 }));
 
@@ -151,8 +227,13 @@ import RawSolidToursEmbed, {
 import { localStateKeyForIdentity } from "./localStorage";
 import { StateConflictError } from "./solidStorage";
 import type { SolidToursSession } from "./embedAuth";
-import type { ActiveRun } from "./types";
+import type { ActiveRun, RouteCatalogPublication, TourDraft } from "./types";
 import { TOURS_LANGUAGE_EVENT, TOURS_LANGUAGE_STORAGE_KEY } from "./i18n";
+import {
+  ROUTE_TEMPLATE_IDENTIFIER_PREFIX,
+  createRouteTemplateSnapshot,
+} from "./routeTemplates";
+import { validateLocalToursState } from "./stateValidation";
 
 // The pre-existing integration suite asserts the German product copy. Keep
 // those behavioral tests explicit while dedicated language-contract tests
@@ -199,6 +280,7 @@ const localStateWithActivity = {
       },
     },
   ],
+  catalogPublications: [],
   activeRun: null,
 };
 
@@ -255,6 +337,26 @@ async function confirmDeleteDialog(container: HTMLElement): Promise<void> {
   });
 }
 
+async function acceptSolidToursOnboarding(container: HTMLElement): Promise<void> {
+  await waitForDom(() => {
+    expect(container.querySelector(".tours-onboarding")).not.toBeNull();
+  });
+  act(() => {
+    container
+      .querySelectorAll<HTMLInputElement>('.tours-onboarding input[type="checkbox"]')
+      .forEach((checkbox) => checkbox.click());
+    const registry = container.querySelector<HTMLInputElement>(
+      '.tours-onboarding input[type="radio"]'
+    );
+    if (registry && !registry.checked) registry.click();
+  });
+  const submit = container.querySelector<HTMLButtonElement>(
+    ".tours-onboarding button.primary"
+  )!;
+  expect(submit.disabled).toBe(false);
+  await act(async () => submit.click());
+}
+
 describe("Solid Tours app shells", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -274,6 +376,9 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.loadState.mockReset();
     podNetworkMocks.loadActivityMasterSnapshot.mockReset();
     podNetworkMocks.loadDraftMasterSnapshot.mockReset();
+    podNetworkMocks.loadDraftMasterResourceSnapshot.mockReset();
+    podNetworkMocks.loadPublicRouteTemplateResourceSnapshot.mockReset();
+    podNetworkMocks.loadSolidToursOnboarding.mockReset();
     podNetworkMocks.loadStateSnapshot.mockReset();
     podNetworkMocks.activityMasterExists.mockReset();
     podNetworkMocks.clearPublishedMarker.mockReset();
@@ -286,16 +391,28 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.saveActivityConditionally.mockReset();
     podNetworkMocks.saveDraftConditionally.mockReset();
     podNetworkMocks.saveInterestsIfMissing.mockReset();
+    podNetworkMocks.savePublicRouteTemplate.mockReset();
+    podNetworkMocks.updatePublicRouteTemplateConditionally.mockReset();
     podNetworkMocks.saveRunSnapshot.mockReset();
+    podNetworkMocks.saveSolidToursOnboarding.mockReset();
     podNetworkMocks.saveState.mockReset();
     podNetworkMocks.saveStateIfUnchanged.mockReset();
     podNetworkMocks.writePublishedMarker.mockReset();
     podNetworkMocks.resolvePodRoot.mockResolvedValue("https://pods.example/alex/");
     podNetworkMocks.ensureStorage.mockResolvedValue(undefined);
+    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue({
+      schemaVersion: 2,
+      app: "solid-tours",
+      appSpecificAcceptedAt: "2026-08-20T12:00:00.000Z",
+      publicPublishingAcceptedAt: "2026-08-20T12:00:00.000Z",
+      publicRegistryUrl: "https://registry.example/research",
+      standaloneAcceptedAt: "2026-08-20T12:00:00.000Z",
+    });
     podNetworkMocks.loadState.mockResolvedValue({
       schemaVersion: 1,
       drafts: [],
       activities: [],
+      catalogPublications: [],
       activeRun: null,
     });
     podNetworkMocks.loadDraftMasterSnapshot.mockResolvedValue({ etag: '"draft-v1"' });
@@ -303,15 +420,64 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.saveActivityConditionally.mockResolvedValue({ etag: '"activity-new"' });
     podNetworkMocks.deleteDraft.mockResolvedValue(undefined);
     podNetworkMocks.saveInterestsIfMissing.mockResolvedValue(undefined);
+    podNetworkMocks.savePublicRouteTemplate.mockImplementation(
+      async (podRoot: string, snapshot: { properties: { routeTemplateId: string } }) =>
+        `${podRoot}solid-tours/public/cataloged-routes/${snapshot.properties.routeTemplateId}.geojson`
+    );
     catalogMocks.publishCatalogEntry.mockReset();
+    catalogMocks.publishRouteTemplateCatalogEntry.mockReset();
+    catalogMocks.updateRouteTemplateCatalogEntry.mockReset();
+    catalogMocks.discoverCatalogedRoutes.mockReset();
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([]);
+    catalogMocks.ensureRouteCatalogReadiness.mockReset();
+    catalogMocks.ensureRouteCatalogReadiness.mockResolvedValue({
+      catalogConfigured: true,
+      publicRegistries: ["https://registry.example/research"],
+      selectedRegistry: "https://registry.example/research",
+    });
+    catalogMocks.getCatalogedRouteDiscoveryReport.mockReset();
+    catalogMocks.getCatalogedRouteDiscoveryReport.mockReturnValue(null);
+    catalogMocks.loadPublicRegistryOptions.mockReset();
+    catalogMocks.loadPublicRegistryOptions.mockReturnValue([
+      {
+        id: "research",
+        label: "Research registry",
+        url: "https://registry.example/research",
+      },
+    ]);
+    catalogMocks.loadRouteCatalogReadiness.mockReset();
+    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
+      catalogConfigured: true,
+      publicRegistries: ["https://registry.example/research"],
+    });
+    catalogMocks.loadCatalogProfileMetadata.mockReset();
+    catalogMocks.loadCatalogProfileMetadata.mockResolvedValue({ publisher: "Alex Example", contactEmail: "alex@example.org" });
+    catalogMocks.saveCatalogProfileMetadata.mockReset();
+    catalogMocks.saveCatalogProfileMetadata.mockImplementation(async ({ publisher, contactEmail }) => ({ publisher, contactEmail }));
     catalogMocks.removeCatalogEntry.mockReset();
     accessRequestMocks.revokeAndArchiveScenarioAccess.mockReset();
     accessRequestMocks.revokeAndArchiveScenarioAccess.mockResolvedValue(0);
+    accessRequestMocks.ensureSolidToursInbox.mockReset();
+    accessRequestMocks.ensureSolidToursInbox.mockResolvedValue(
+      "https://pods.example/alex/inbox/"
+    );
+    accessRequestMocks.getSolidToursInboxReadiness.mockReset();
+    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+      configured: true,
+      inboxUrl: "https://pods.example/alex/inbox/",
+    });
+    accessRequestMocks.resolveSolidInbox.mockReset();
+    accessRequestMocks.resolveSolidInbox.mockResolvedValue(
+      "https://pods.example/alex/inbox/"
+    );
     leafletMocks.mapFactory.mockClear();
     leafletMocks.zoomControlFactory.mockClear();
     leafletMocks.zoomControl.remove.mockClear();
     leafletMocks.map.on.mockClear();
     leafletMocks.map.remove.mockClear();
+    leafletMocks.routeLayers.length = 0;
+    leafletMocks.circleMarkerFactory.mockClear();
+    leafletMocks.polylineFactory.mockClear();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -322,7 +488,7 @@ describe("Solid Tours app shells", () => {
     container.remove();
   });
 
-  it("shows the same plain loading treatment as embedded external apps while a Pod state is resolving", async () => {
+  it("shows a localized accessible loading state while a Pod state is resolving", async () => {
     podNetworkMocks.resolvePodRoot.mockReturnValue(new Promise<string>(() => undefined));
 
     act(() =>
@@ -343,11 +509,21 @@ describe("Solid Tours app shells", () => {
     });
 
     const status = container.querySelector<HTMLElement>(".tours-loading");
-    expect(status?.textContent).toBe("Wird geladen …");
-    expect(status?.tagName).toBe("P");
+    expect(status?.textContent).toContain("Solid Tours");
+    expect(status?.textContent).toContain("Dein persönlicher Tourenbereich wird geladen …");
+    expect(status?.tagName).toBe("MAIN");
+    expect(status?.getAttribute("aria-busy")).toBe("true");
+    const message = status?.querySelector<HTMLElement>('[role="status"]');
+    expect(message?.getAttribute("aria-live")).toBe("polite");
+    expect(message?.textContent).toBe("Dein persönlicher Tourenbereich wird geladen …");
+    expect(status?.querySelector(".tours-loading-mark .fa-route")).not.toBeNull();
+    const progress = status?.querySelector<HTMLElement>('[role="progressbar"]');
+    expect(progress?.getAttribute("aria-label")).toBe(
+      "Dein persönlicher Tourenbereich wird geladen …"
+    );
+    expect(progress?.hasAttribute("aria-valuenow")).toBe(false);
     expect(container.querySelector(".tours-loading-spinner")).toBeNull();
     expect(container.querySelector(".language-toggle")).toBeNull();
-    expect(status?.textContent).not.toContain("Solid Tours");
     expect(container.querySelector(".loading-route")).toBeNull();
     expect(container.querySelector(".route-workspace")).toBeNull();
   });
@@ -398,6 +574,167 @@ describe("Solid Tours app shells", () => {
       );
     });
     expect(container.textContent).toContain("Suggested providers");
+  });
+
+  it("repairs standalone Inbox and public Catalog setup without requiring Manager onboarding", async () => {
+    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue(null);
+    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
+      catalogConfigured: false,
+      publicRegistries: [],
+    });
+    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+      configured: false,
+      inboxUrl: "https://pods.example/alex/inbox/",
+    });
+
+    act(() => root.render(createElement(App, { webIdOverride: NON_HANNAH_WEB_ID })));
+
+    await waitForDom(() => {
+      expect(container.querySelector(".tours-onboarding--standalone")).not.toBeNull();
+    });
+    expect(container.textContent).toContain("Solid Inbox for access requests");
+    expect(container.textContent).toContain("You do not need to complete the Dataspace Manager onboarding first");
+    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
+
+    await acceptSolidToursOnboarding(container);
+    await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
+
+    expect(accessRequestMocks.ensureSolidToursInbox).toHaveBeenCalledWith({
+      podRoot: "https://pods.example/alex/",
+      webId: NON_HANNAH_WEB_ID,
+      fetcher: expect.any(Function),
+    });
+    expect(catalogMocks.saveCatalogProfileMetadata).toHaveBeenCalledWith({
+      webId: NON_HANNAH_WEB_ID,
+      publisher: "Alex Example",
+      contactEmail: "alex@example.org",
+      fetcher: expect.any(Function),
+    });
+    expect(catalogMocks.saveCatalogProfileMetadata.mock.invocationCallOrder[0]).toBeLessThan(accessRequestMocks.ensureSolidToursInbox.mock.invocationCallOrder[0]);
+    expect(catalogMocks.ensureRouteCatalogReadiness).toHaveBeenCalledWith({
+      podRoot: "https://pods.example/alex/",
+      webId: NON_HANNAH_WEB_ID,
+      registryUrl: "https://registry.example/research",
+      fetcher: expect.any(Function),
+    });
+    expect(podNetworkMocks.saveSolidToursOnboarding).toHaveBeenCalledWith(
+      "https://pods.example/alex/",
+      expect.objectContaining({
+        schemaVersion: 2,
+        app: "solid-tours",
+        publicRegistryUrl: "https://registry.example/research",
+      }),
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
+    expect(
+      accessRequestMocks.ensureSolidToursInbox.mock.invocationCallOrder[0]
+    ).toBeLessThan(catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]);
+    expect(
+      catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]
+    ).toBeLessThan(podNetworkMocks.ensureStorage.mock.invocationCallOrder[0]);
+    expect(accessRequestMocks.resolveSolidInbox).not.toHaveBeenCalled();
+  });
+
+  it("revalidates a saved record and blocks embed setup when the Inbox was revoked", async () => {
+    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+      configured: false,
+      inboxUrl: "https://pods.example/alex/inbox/",
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          demoWebId: HANNAH_WEB_ID,
+        })
+      )
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
+    });
+    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Solid-Inbox für Zugriffsanfragen");
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+    expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      "allgemeine Dataspace-Onboarding"
+    );
+    act(() => {
+      container
+        .querySelectorAll<HTMLInputElement>('.tours-onboarding input[type="checkbox"]')
+        .forEach((checkbox) => checkbox.click());
+    });
+    expect(
+      container.querySelector<HTMLButtonElement>(".tours-onboarding button.primary")?.disabled
+    ).toBe(true);
+    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
+    expect(container.querySelector(".route-workspace")).toBeNull();
+  });
+
+  it("does not let a saved onboarding record bypass a removed public registry", async () => {
+    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
+      catalogConfigured: false,
+      publicRegistries: [],
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          demoWebId: HANNAH_WEB_ID,
+        })
+      )
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
+    });
+    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
+    expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      "allgemeine Dataspace-Onboarding"
+    );
+    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
+    expect(container.querySelector(".route-workspace")).toBeNull();
+  });
+
+  it("accepts only app-specific consent in embed mode when Dataspace readiness exists", async () => {
+    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue(null);
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          demoWebId: HANNAH_WEB_ID,
+        })
+      )
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
+    });
+    expect(container.textContent).not.toContain("Solid-Inbox für Zugriffsanfragen");
+    expect(container.textContent).not.toContain("Öffentliche Forschungs-Registry");
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+
+    await acceptSolidToursOnboarding(container);
+    await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
+
+    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
+    expect(catalogMocks.loadRouteCatalogReadiness).toHaveBeenCalledTimes(2);
+    expect(accessRequestMocks.getSolidToursInboxReadiness).toHaveBeenCalledTimes(2);
+    expect(podNetworkMocks.saveSolidToursOnboarding).toHaveBeenCalledWith(
+      "https://pods.example/alex/",
+      expect.objectContaining({
+        schemaVersion: 2,
+        publicRegistryUrl: "https://registry.example/research",
+      }),
+      NON_HANNAH_WEB_ID,
+      expect.any(Function)
+    );
   });
 
   it("uses Pod storage and shows the standalone shell for an arbitrary Solid login", async () => {
@@ -569,12 +906,12 @@ describe("Solid Tours app shells", () => {
     expect(myToursCard!.lastElementChild).toBe(tourCompletion);
     expect(tourCompletion!.lastElementChild).toBe(completeButton);
     expect(container.querySelector(".panel-section--planner .primary")).toBeNull();
-    expect(container.querySelector(".panel-section--planner .save-draft-button")?.textContent).toBe(
-      "Entwurf speichern"
+    expect(container.querySelector(".panel-section--planner .edit-draft-button")?.textContent).toBe(
+      "Route bearbeiten"
     );
     expect(container.querySelector(".map-stage > .map-stats")).not.toBeNull();
     expect(container.querySelector(".planner-panel .map-stats")).toBeNull();
-    expect(container.querySelector(".map-edit-toolbar")).not.toBeNull();
+    expect(container.querySelector(".map-edit-toolbar")).toBeNull();
     expect(container.textContent).toContain("20.08.2026");
     const completedDateInput = myToursCard!.querySelector<HTMLInputElement>(".tour-completion input")!;
     act(() => {
@@ -596,6 +933,856 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelectorAll<HTMLInputElement>('input[name="completion-activity"]:checked')).toHaveLength(0);
     expect(container.querySelectorAll(".activity-item")).toHaveLength(1);
     expect(container.textContent).not.toContain("Lokal");
+  });
+
+  it("stores a private cleanup reference before publishing a route template", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    let authoritative = {
+      ...localStateWithActivity,
+      catalogPublications: [] as RouteCatalogPublication[],
+    };
+    let stateVersion = 1;
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag: `"state-v${stateVersion}"`,
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(
+      async (_root, nextState) => {
+        authoritative = nextState;
+        stateVersion += 1;
+        return { state: nextState, etag: `"state-v${stateVersion}"` };
+      }
+    );
+    catalogMocks.publishRouteTemplateCatalogEntry.mockImplementation(
+      async ({ snapshot }) => {
+        const datasetIdentifier = `solid-tours-route-template-${snapshot.properties.routeTemplateId}`;
+        return {
+          datasetIdentifier,
+          catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+        };
+      }
+    );
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-index")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-index")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--catalog .primary")!.click()
+    );
+
+    await waitForDom(() => expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledTimes(2));
+    expect(catalogMocks.publishRouteTemplateCatalogEntry).toHaveBeenCalledOnce();
+    expect(
+      podNetworkMocks.saveStateIfUnchanged.mock.invocationCallOrder[0]
+    ).toBeLessThan(podNetworkMocks.savePublicRouteTemplate.mock.invocationCallOrder[0]);
+    const stagedState = podNetworkMocks.saveStateIfUnchanged.mock.calls[0][1];
+    expect(stagedState.catalogPublications).toHaveLength(1);
+    expect(stagedState.catalogPublications[0]).toEqual(
+      expect.objectContaining({
+        phase: "publishing",
+        sourceDraftId: localStateWithActivity.drafts[0].id,
+        sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      })
+    );
+    expect(authoritative.catalogPublications[0]).toEqual(
+      expect.objectContaining({ phase: "published" })
+    );
+  });
+
+  it.each(["publishing", "removing"] as const)(
+    "fails closed when editing a route whose catalog publication is %s",
+    async (phase) => {
+      const podRoot = "https://pods.example/alex/";
+      const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+      const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+      const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+      const publication: RouteCatalogPublication = {
+        phase,
+        phaseChangedAt: new Date().toISOString(),
+        routeTemplateId,
+        sourceDraftId: localStateWithActivity.drafts[0].id,
+        sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+        resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+        datasetIdentifier,
+        catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+        publishedAt: "2026-08-20T14:00:00.000Z",
+      };
+      podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+      podNetworkMocks.loadState.mockResolvedValue({
+        ...localStateWithActivity,
+        catalogPublications: [publication],
+      });
+
+      act(() =>
+        root.render(
+          createElement(SolidToursEmbed, {
+            webId: NON_HANNAH_WEB_ID,
+            session: {
+              info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+              fetch: managerFetch,
+            },
+          })
+        )
+      );
+      await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+
+      const editButton = container.querySelector<HTMLButtonElement>(".edit-draft-button")!;
+      expect(editButton.disabled).toBe(true);
+
+      // Exercise the handler guard independently of the declarative disabled
+      // state, as a stale DOM or scripted invocation must not bypass it. React
+      // suppresses delegated click events from its Fiber props even after only
+      // the native flag is cleared, so invoke the bound handler explicitly.
+      editButton.disabled = false;
+      const reactPropsKey = Object.getOwnPropertyNames(editButton).find((key) =>
+        key.startsWith("__reactProps$")
+      );
+      expect(reactPropsKey).toBeDefined();
+      const reactProps = (
+        editButton as unknown as Record<string, { onClick?: () => void }>
+      )[reactPropsKey!];
+      expect(reactProps.onClick).toBeTypeOf("function");
+      act(() => reactProps.onClick!());
+
+      await waitForDom(() => {
+        expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+          "Die Routenvorlage ist erst nach Abschluss der laufenden Katalogaktion wieder bearbeitbar."
+        );
+      });
+      expect(container.querySelector(".save-draft-button")).toBeNull();
+      expect(container.querySelector<HTMLInputElement>(".form-grid input")?.disabled).toBe(true);
+      expect(podNetworkMocks.loadStateSnapshot).not.toHaveBeenCalled();
+      expect(podNetworkMocks.saveDraftConditionally).not.toHaveBeenCalled();
+    }
+  );
+
+  it("updates an indexed route only after explicit save while preserving every public identifier", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+    const resourceUrl = `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`;
+    const catalogDatasetUrl = `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`;
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId,
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl,
+      datasetIdentifier,
+      catalogDatasetUrl,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    let authoritative = {
+      ...localStateWithActivity,
+      catalogPublications: [publication],
+    };
+    let stateVersion = 1;
+    const previousPublicSnapshot = createRouteTemplateSnapshot(
+      localStateWithActivity.drafts[0] as unknown as TourDraft,
+      routeTemplateId
+    );
+    const previousResourceSnapshot = {
+      resourceUrl,
+      snapshot: previousPublicSnapshot,
+      etag: '"route-v1"',
+    };
+
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(authoritative);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag: `"state-v${stateVersion}"`,
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      authoritative = nextState;
+      stateVersion += 1;
+      return { state: nextState, etag: `"state-v${stateVersion}"` };
+    });
+    podNetworkMocks.loadPublicRouteTemplateResourceSnapshot.mockResolvedValue(
+      previousResourceSnapshot
+    );
+    podNetworkMocks.loadDraftMasterResourceSnapshot.mockResolvedValue({
+      draft: localStateWithActivity.drafts[0],
+      etag: '"draft-v1"',
+    });
+    podNetworkMocks.updatePublicRouteTemplateConditionally.mockImplementation(
+      async (_root, _resourceUrl, _templateId, nextSnapshot) => ({
+        previous: previousResourceSnapshot,
+        current: {
+          resourceUrl,
+          snapshot: nextSnapshot,
+          etag: '"route-v2"',
+        },
+      })
+    );
+    catalogMocks.updateRouteTemplateCatalogEntry.mockResolvedValue({
+      datasetIdentifier,
+      catalogDatasetUrl,
+      catalogRecordUrl: `${podRoot}catalog/records/${datasetIdentifier}.ttl`,
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+
+    const mapClickRegistration = leafletMocks.map.on.mock.calls.find(
+      ([eventName]) => eventName === "click"
+    )!;
+    act(() =>
+      mapClickRegistration[1]({ latlng: { lng: 7.24, lat: 51.29 } })
+    );
+    expect(container.querySelector(".map-error-overlay")).toBeNull();
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    expect(container.querySelector(".public-route-edit-hint")?.textContent).toContain(
+      "Katalogeintrag aktualisiert"
+    );
+    const nameInput = container.querySelector<HTMLInputElement>(".form-grid input")!;
+    act(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )!.set!;
+      valueSetter.call(nameInput, "Aktualisierte Wuppertaler Runde");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(podNetworkMocks.updatePublicRouteTemplateConditionally).not.toHaveBeenCalled();
+    expect(catalogMocks.updateRouteTemplateCatalogEntry).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveDraftConditionally).not.toHaveBeenCalled();
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".save-draft-button")!.click()
+    );
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+
+    const stagedUpdate = podNetworkMocks.saveStateIfUnchanged.mock.calls[0][1]
+      .catalogPublications[0] as RouteCatalogPublication;
+    expect(stagedUpdate).toEqual(
+      expect.objectContaining({
+        phase: "updating",
+        pendingUpdate: expect.objectContaining({
+          operationId: expect.any(String),
+          leaseId: expect.any(String),
+          draft: expect.objectContaining({ name: "Aktualisierte Wuppertaler Runde" }),
+        }),
+      })
+    );
+    expect(
+      podNetworkMocks.saveStateIfUnchanged.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      podNetworkMocks.updatePublicRouteTemplateConditionally.mock.invocationCallOrder[0]
+    );
+
+    expect(podNetworkMocks.updatePublicRouteTemplateConditionally).toHaveBeenCalledWith(
+      podRoot,
+      resourceUrl,
+      routeTemplateId,
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          routeTemplateId,
+          name: "Aktualisierte Wuppertaler Runde",
+        }),
+      }),
+      NON_HANNAH_WEB_ID,
+      expect.any(Function),
+      previousResourceSnapshot
+    );
+    expect(catalogMocks.updateRouteTemplateCatalogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        podRoot,
+        webId: NON_HANNAH_WEB_ID,
+        resourceUrl,
+        catalogDatasetUrl,
+        publishedAt: publication.publishedAt,
+        operationId: expect.any(String),
+        snapshot: expect.objectContaining({
+          properties: expect.objectContaining({ routeTemplateId }),
+        }),
+      })
+    );
+    expect(authoritative.catalogPublications[0]).toEqual(
+      expect.objectContaining({
+        phase: "published",
+        routeTemplateId,
+        resourceUrl,
+        datasetIdentifier,
+        catalogDatasetUrl,
+        sourceDraftUpdatedAt: authoritative.drafts[0].updatedAt,
+      })
+    );
+    expect(authoritative.drafts[0].name).toBe("Aktualisierte Wuppertaler Runde");
+    expect(authoritative.catalogPublications[0].pendingUpdate).toBeUndefined();
+    expect(catalogMocks.removeCatalogEntry).not.toHaveBeenCalled();
+  });
+
+  it("resumes a stale published-route update after reload without replacing public identities", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const datasetIdentifier = `solid-tours-route-template-${routeTemplateId}`;
+    const resourceUrl = `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`;
+    const catalogDatasetUrl = `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`;
+    const baselineDraft = localStateWithActivity.drafts[0] as unknown as TourDraft;
+    const pendingDraft: TourDraft = {
+      ...baselineDraft,
+      name: "Recovered Wuppertal route",
+      updatedAt: "2026-08-20T15:00:00.000Z",
+    };
+    const operationId = "9be23928-bff4-49ad-981d-2a6d48fc3c20";
+    const publication: RouteCatalogPublication = {
+      phase: "updating",
+      phaseChangedAt: "2026-08-20T15:00:00.000Z",
+      routeTemplateId,
+      sourceDraftId: baselineDraft.id,
+      sourceDraftUpdatedAt: baselineDraft.updatedAt,
+      resourceUrl,
+      datasetIdentifier,
+      catalogDatasetUrl,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+      pendingUpdate: {
+        operationId,
+        leaseId: "f8b321a2-f550-4e90-8f39-09e80eced0b3",
+        draft: pendingDraft,
+      },
+    };
+    let authoritative = {
+      ...localStateWithActivity,
+      drafts: [baselineDraft],
+      catalogPublications: [publication],
+    };
+    let stateVersion = 1;
+    const targetPublicSnapshot = createRouteTemplateSnapshot(pendingDraft, routeTemplateId);
+
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(authoritative);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag: `"state-v${stateVersion}"`,
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      authoritative = nextState;
+      stateVersion += 1;
+      return { state: nextState, etag: `"state-v${stateVersion}"` };
+    });
+    podNetworkMocks.loadPublicRouteTemplateResourceSnapshot.mockResolvedValue({
+      resourceUrl,
+      snapshot: targetPublicSnapshot,
+      etag: '"route-v2"',
+    });
+    podNetworkMocks.loadDraftMasterResourceSnapshot.mockResolvedValue({
+      draft: pendingDraft,
+      etag: '"draft-v2"',
+    });
+    catalogMocks.updateRouteTemplateCatalogEntry.mockResolvedValue({
+      datasetIdentifier,
+      catalogDatasetUrl,
+      catalogRecordUrl: `${podRoot}catalog/records/${datasetIdentifier}.ttl`,
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+    expect(container.querySelector<HTMLButtonElement>(".edit-draft-button")!.disabled).toBe(false);
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    await waitForDom(() => expect(authoritative.catalogPublications[0].phase).toBe("published"));
+    await waitForDom(() => expect(container.querySelector(".save-draft-button")).not.toBeNull());
+
+    expect(authoritative.drafts[0]).toEqual(pendingDraft);
+    expect(authoritative.catalogPublications[0]).toEqual(
+      expect.objectContaining({
+        phase: "published",
+        routeTemplateId,
+        resourceUrl,
+        datasetIdentifier,
+        catalogDatasetUrl,
+        sourceDraftUpdatedAt: pendingDraft.updatedAt,
+      })
+    );
+    expect(authoritative.catalogPublications[0].pendingUpdate).toBeUndefined();
+    expect(podNetworkMocks.updatePublicRouteTemplateConditionally).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveDraftConditionally).not.toHaveBeenCalled();
+    expect(catalogMocks.updateRouteTemplateCatalogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogDatasetUrl,
+        operationId,
+        publishedAt: publication.publishedAt,
+        resourceUrl,
+        snapshot: targetPublicSnapshot,
+      })
+    );
+  });
+
+  it("rolls public route writes back when the final authoritative reservation disappeared", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    let authoritative = {
+      ...localStateWithActivity,
+      catalogPublications: [] as RouteCatalogPublication[],
+    };
+    let etag = '"state-v1"';
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({ state: authoritative, etag }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      authoritative = nextState;
+      etag = '"state-v2"';
+      return { state: nextState, etag };
+    });
+    catalogMocks.publishRouteTemplateCatalogEntry.mockImplementation(async ({ snapshot }) => {
+      const datasetIdentifier = `solid-tours-route-template-${snapshot.properties.routeTemplateId}`;
+      // Simulate another tab/manual edit removing Tab A's private reservation
+      // while its public catalog request is in flight.
+      authoritative = { ...authoritative, catalogPublications: [] };
+      etag = '"state-v3"';
+      return {
+        datasetIdentifier,
+        catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+      };
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-index")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-index")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--catalog .primary")!.click()
+    );
+
+    await waitForDom(() => expect(podNetworkMocks.safeDelete).toHaveBeenCalledOnce());
+    expect(catalogMocks.removeCatalogEntry).toHaveBeenCalledOnce();
+    expect(podNetworkMocks.setOwnerOnlyIfPresent).toHaveBeenCalledOnce();
+    expect(authoritative.catalogPublications).toHaveLength(0);
+    expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledOnce();
+  });
+
+  it("claims published-route cleanup before performing external deletes", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+      datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    let authoritative = {
+      ...localStateWithActivity,
+      catalogPublications: [publication],
+    };
+    let stateVersion = 1;
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(authoritative);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag: `"state-v${stateVersion}"`,
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      authoritative = nextState;
+      stateVersion += 1;
+      return { state: nextState, etag: `"state-v${stateVersion}"` };
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-remove")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-remove")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--danger .danger")!.click()
+    );
+
+    await waitForDom(() => expect(authoritative.catalogPublications).toHaveLength(0));
+    expect(podNetworkMocks.saveStateIfUnchanged.mock.calls[0][1].catalogPublications[0].phase).toBe(
+      "removing"
+    );
+    expect(podNetworkMocks.saveStateIfUnchanged.mock.invocationCallOrder[0]).toBeLessThan(
+      catalogMocks.removeCatalogEntry.mock.invocationCallOrder[0]
+    );
+    expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains a removing handle when external cleanup is only partially successful", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+      datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    let authoritative = { ...localStateWithActivity, catalogPublications: [publication] };
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(authoritative);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag: '"state-v1"',
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      authoritative = nextState;
+      return { state: nextState, etag: '"state-v2"' };
+    });
+    catalogMocks.removeCatalogEntry.mockRejectedValue(new TypeError("catalog unavailable"));
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-remove")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-remove")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--danger .danger")!.click()
+    );
+
+    await waitForDom(() =>
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "nicht vollständig entfernt"
+      )
+    );
+    expect(authoritative.catalogPublications[0].phase).toBe("removing");
+    expect(podNetworkMocks.setOwnerOnlyIfPresent).toHaveBeenCalledOnce();
+    expect(podNetworkMocks.safeDelete).toHaveBeenCalledOnce();
+    expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledOnce();
+  });
+
+  it("blocks Tab B unpublish while Tab A still owns the publishing lease", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+      datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    const renderedState = { ...localStateWithActivity, catalogPublications: [publication] };
+    const authoritativeState = {
+      ...renderedState,
+      catalogPublications: [
+        { ...publication, phase: "publishing" as const, phaseChangedAt: new Date().toISOString() },
+      ],
+    };
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(renderedState);
+    podNetworkMocks.loadStateSnapshot.mockResolvedValue({
+      state: authoritativeState,
+      etag: '"state-v2"',
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-remove")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-remove")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--danger .danger")!.click()
+    );
+
+    await waitForDom(() =>
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "gerade veröffentlicht"
+      )
+    );
+    expect(catalogMocks.removeCatalogEntry).not.toHaveBeenCalled();
+    expect(podNetworkMocks.setOwnerOnlyIfPresent).not.toHaveBeenCalled();
+    expect(podNetworkMocks.safeDelete).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveStateIfUnchanged).not.toHaveBeenCalled();
+  });
+
+  it("does not duplicate cleanup already claimed by another tab", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+      datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    const renderedState = { ...localStateWithActivity, catalogPublications: [publication] };
+    const authoritativeState = {
+      ...renderedState,
+      catalogPublications: [
+        { ...publication, phase: "removing" as const, phaseChangedAt: new Date().toISOString() },
+      ],
+    };
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(renderedState);
+    podNetworkMocks.loadStateSnapshot.mockResolvedValue({
+      state: authoritativeState,
+      etag: '"state-v2"',
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-remove")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-remove")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--danger .danger")!.click()
+    );
+
+    await waitForDom(() =>
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "anderen Tab entfernt"
+      )
+    );
+    expect(catalogMocks.removeCatalogEntry).not.toHaveBeenCalled();
+    expect(podNetworkMocks.safeDelete).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveStateIfUnchanged).not.toHaveBeenCalled();
+  });
+
+  it.each(["publishing", "removing"] as const)(
+    "recovers a stale %s reservation after a crashed tab",
+    async (phase) => {
+      const podRoot = "https://pods.example/alex/";
+      const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+      const publication: RouteCatalogPublication = {
+        phase,
+        phaseChangedAt: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+        routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+        sourceDraftId: localStateWithActivity.drafts[0].id,
+        sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+        resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+        datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+        catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+        publishedAt: "2026-08-20T14:00:00.000Z",
+      };
+      let authoritative = { ...localStateWithActivity, catalogPublications: [publication] };
+      let stateVersion = 1;
+      podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+      podNetworkMocks.loadState.mockResolvedValue(authoritative);
+      podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+        state: authoritative,
+        etag: `"state-v${stateVersion}"`,
+      }));
+      podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+        authoritative = nextState;
+        stateVersion += 1;
+        return { state: nextState, etag: `"state-v${stateVersion}"` };
+      });
+
+      act(() =>
+        root.render(
+          createElement(SolidToursEmbed, {
+            webId: NON_HANNAH_WEB_ID,
+            session: {
+              info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+              fetch: managerFetch,
+            },
+          })
+        )
+      );
+      await waitForDom(() => expect(container.querySelector(".catalog-remove")).not.toBeNull());
+      await act(async () => container.querySelector<HTMLButtonElement>(".catalog-remove")!.click());
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>(".confirm-dialog--danger .danger")!.click()
+      );
+
+      await waitForDom(() => expect(authoritative.catalogPublications).toHaveLength(0));
+      expect(catalogMocks.removeCatalogEntry).toHaveBeenCalledOnce();
+      if (phase === "publishing") {
+        expect(
+          podNetworkMocks.saveStateIfUnchanged.mock.calls[0][1].catalogPublications[0].phase
+        ).toBe("removing");
+        expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledTimes(2);
+      } else {
+        expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledOnce();
+      }
+    }
+  );
+
+  it("keeps a deterministic cleanup handle when a public route write loses its response", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    let authoritative = localStateWithActivity;
+    let etag = '"state-v1"';
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({
+      state: authoritative,
+      etag,
+    }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(
+      async (_root, nextState) => {
+        authoritative = nextState;
+        etag = etag === '"state-v1"' ? '"state-v2"' : '"state-v3"';
+        return { state: nextState, etag };
+      }
+    );
+    podNetworkMocks.savePublicRouteTemplate.mockRejectedValue(
+      new TypeError("public PUT response lost")
+    );
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-index")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-index")!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".confirm-dialog--catalog .primary")!.click()
+    );
+
+    await waitForDom(() => expect(podNetworkMocks.safeDelete).toHaveBeenCalledOnce());
+    const stagedPublication = podNetworkMocks.saveStateIfUnchanged.mock.calls[0][1]
+      .catalogPublications[0];
+    expect(podNetworkMocks.safeDelete).toHaveBeenCalledWith(
+      stagedPublication.resourceUrl,
+      expect.any(Function)
+    );
+    expect(catalogMocks.removeCatalogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasetIdentifier: stagedPublication.datasetIdentifier,
+        catalogDatasetUrl: stagedPublication.catalogDatasetUrl,
+      })
+    );
+    await waitForDom(() => expect(authoritative.catalogPublications).toHaveLength(0));
+  });
+
+  it("blocks draft deletion when another tab cataloged the route after the dialog opened", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const publication = {
+      phase: "published" as const,
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/69020722-f94e-4d99-9aac-37b33d5607c7.geojson`,
+      datasetIdentifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    podNetworkMocks.loadStateSnapshot.mockResolvedValue({
+      state: { ...localStateWithActivity, catalogPublications: [publication] },
+      etag: '"state-v2"',
+    });
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".draft-item .delete-link")).not.toBeNull());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".draft-item .delete-link")!.click()
+    );
+    await confirmDeleteDialog(container);
+
+    await waitForDom(() =>
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "öffentlichen Routenkatalog"
+      )
+    );
+    expect(podNetworkMocks.deleteDraft).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveStateIfUnchanged).not.toHaveBeenCalled();
   });
 
   it("keeps embed state while following controlled English and German language props", async () => {
@@ -626,6 +1813,7 @@ describe("Solid Tours app shells", () => {
       );
     });
     expect(container.textContent).toContain("Tour planner");
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
     const nameInput = container.querySelector<HTMLInputElement>(".form-grid input")!;
     act(() => {
       const valueSetter = Object.getOwnPropertyDescriptor(
@@ -635,6 +1823,10 @@ describe("Solid Tours app shells", () => {
       valueSetter.call(nameInput, "Hannah's custom route");
       nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".save-draft-button")!.click();
+    });
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
     const completeButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button")
     ).find((button) => button.textContent === "Tour completed")!;
@@ -774,6 +1966,495 @@ describe("Solid Tours app shells", () => {
     expect(clearButton).toBeDefined();
     act(() => clearButton!.click());
     expect(container.querySelector(".map-edit-toolbar")).toBeNull();
+  });
+
+  it("renders smooth routes without per-vertex dots and uses map clicks for selection in view mode", async () => {
+    const secondDraft = {
+      ...localStateWithActivity.drafts[0],
+      id: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+      name: "Nordbahntrasse",
+      geometry: [Array.from({ length: 80 }, (_, index) => [
+        7.1 + index * 0.0005,
+        51.2 + index * 0.0002,
+      ])],
+    };
+    const twoRouteState = {
+      ...localStateWithActivity,
+      drafts: [localStateWithActivity.drafts[0], secondDraft],
+    };
+    expect(validateLocalToursState(twoRouteState).drafts).toHaveLength(2);
+    window.localStorage.setItem(
+      localStateKeyForIdentity(null),
+      JSON.stringify(twoRouteState)
+    );
+
+    act(() => root.render(createElement(SolidToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelectorAll(".draft-item")).toHaveLength(2));
+
+    expect(leafletMocks.circleMarkerFactory).not.toHaveBeenCalled();
+    expect(leafletMocks.polylineFactory.mock.calls).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.any(Array),
+          expect.objectContaining({
+            smoothFactor: 1.5,
+            lineCap: "round",
+            lineJoin: "round",
+            bubblingMouseEvents: false,
+          }),
+        ]),
+      ])
+    );
+
+    const mapClickRegistration = leafletMocks.map.on.mock.calls.find(
+      ([eventName]) => eventName === "click"
+    )!;
+    const handleMapClick = mapClickRegistration[1] as (event: {
+      latlng: { lng: number; lat: number };
+    }) => void;
+    const renderCountBeforeViewClick = leafletMocks.polylineFactory.mock.calls.length;
+    act(() => handleMapClick({ latlng: { lng: 7.25, lat: 51.3 } }));
+    expect(leafletMocks.polylineFactory).toHaveBeenCalledTimes(renderCountBeforeViewClick);
+    expect(container.querySelector(".map-error-overlay")).toBeNull();
+
+    const selectableRouteLayer = leafletMocks.routeLayers.find(
+      (layer) =>
+        layer.options.color === "#174ea6" &&
+        layer.on.mock.calls.some(([eventName]) => eventName === "click")
+    );
+    expect(selectableRouteLayer).toBeDefined();
+    act(() =>
+      selectableRouteLayer!.click({ latlng: { lng: 7.2, lat: 51.24 } })
+    );
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
+      "Nordbahntrasse"
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('.list-item[aria-current="true"]')?.textContent
+    ).toContain("Nordbahntrasse");
+    expect(container.querySelector(".map-error-overlay")).toBeNull();
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    const activeRouteLayer = [...leafletMocks.routeLayers]
+      .reverse()
+      .find((layer) => layer.options.color === "#d97706");
+    expect(activeRouteLayer?.options).toEqual(
+      expect.objectContaining({
+        interactive: true,
+        bubblingMouseEvents: false,
+      })
+    );
+    const renderCountBeforeActiveRouteClick = leafletMocks.polylineFactory.mock.calls.length;
+    act(() =>
+      activeRouteLayer!.click({ latlng: { lng: 7.22, lat: 51.26 } })
+    );
+    expect(leafletMocks.polylineFactory).toHaveBeenCalledTimes(
+      renderCountBeforeActiveRouteClick
+    );
+
+    const renderCountBeforeEditClick = leafletMocks.polylineFactory.mock.calls.length;
+    act(() => handleMapClick({ latlng: { lng: 7.26, lat: 51.31 } }));
+    expect(leafletMocks.polylineFactory.mock.calls.length).toBeGreaterThan(
+      renderCountBeforeEditClick
+    );
+    act(() => container.querySelector<HTMLButtonElement>(".cancel-edit-button")!.click());
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
+      "Nordbahntrasse"
+    );
+    expect(container.querySelector(".edit-draft-button")).not.toBeNull();
+    expect(podNetworkMocks.saveDraftConditionally).not.toHaveBeenCalled();
+  });
+
+  it("keeps unsaved editor changes when a route import is attempted", async () => {
+    window.localStorage.setItem(
+      localStateKeyForIdentity(null),
+      JSON.stringify(localStateWithActivity)
+    );
+    act(() => root.render(createElement(SolidToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    const nameInput = container.querySelector<HTMLInputElement>(".form-grid input")!;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value"
+    )!.set!;
+    act(() => {
+      valueSetter.call(nameInput, "Ungespeicherte Änderungen");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const routeFile = new File(
+      [
+        JSON.stringify({
+          type: "Feature",
+          properties: { name: "Importierte Route" },
+          geometry: {
+            type: "LineString",
+            coordinates: [[7.3, 51.3], [7.4, 51.4]],
+          },
+        }),
+      ],
+      "imported-route.geojson",
+      { type: "application/geo+json" }
+    );
+    const fileInput = container.querySelector<HTMLInputElement>(".file-button input")!;
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [routeFile],
+    });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await waitForDom(() => {
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "Speichere oder verwirf zuerst die aktuellen Änderungen."
+      );
+    });
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
+      "Ungespeicherte Änderungen"
+    );
+    expect(container.querySelectorAll(".draft-item")).toHaveLength(1);
+    expect(
+      JSON.parse(window.localStorage.getItem(localStateKeyForIdentity(null))!).drafts
+    ).toEqual(localStateWithActivity.drafts);
+  });
+
+  it("keeps unsaved editor changes when duplicating a stored route is attempted", async () => {
+    window.localStorage.setItem(
+      localStateKeyForIdentity(null),
+      JSON.stringify(localStateWithActivity)
+    );
+    act(() => root.render(createElement(SolidToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    const nameInput = container.querySelector<HTMLInputElement>(".form-grid input")!;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value"
+    )!.set!;
+    act(() => {
+      valueSetter.call(nameInput, "Ungespeicherte Änderungen");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const duplicateButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".draft-actions button")
+    ).find((button) => button.textContent === "Duplizieren")!;
+    await act(async () => duplicateButton.click());
+
+    await waitForDom(() => {
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "Speichere oder verwirf zuerst die aktuellen Änderungen."
+      );
+    });
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
+      "Ungespeicherte Änderungen"
+    );
+    expect(container.querySelectorAll(".draft-item")).toHaveLength(1);
+    expect(
+      JSON.parse(window.localStorage.getItem(localStateKeyForIdentity(null))!).drafts
+    ).toEqual(localStateWithActivity.drafts);
+  });
+
+  it("keeps unsaved editor changes when adopting a catalog route is attempted", async () => {
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([
+      {
+        routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+        identifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+        name: "Katalogroute",
+        description: "Öffentliche Teststrecke",
+        publisher: "Tour Publisher",
+        datasetUrl: "https://pods.example/publisher/catalog/ds/route.ttl#it",
+        distributionUrl: "https://pods.example/publisher/public/route.geojson",
+        geometry: [[[7.3, 51.3], [7.4, 51.4]]],
+        distanceMeters: 12_000,
+      },
+    ]);
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => {
+      expect(container.querySelector(".edit-draft-button")).not.toBeNull();
+      expect(container.querySelector(".catalog-adopt")).not.toBeNull();
+    });
+
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    const nameInput = container.querySelector<HTMLInputElement>(".form-grid input")!;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value"
+    )!.set!;
+    act(() => {
+      valueSetter.call(nameInput, "Ungespeicherte Änderungen");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".catalog-adopt")!.click()
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        "Speichere oder verwirf zuerst die aktuellen Änderungen."
+      );
+    });
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
+      "Ungespeicherte Änderungen"
+    );
+    expect(container.querySelectorAll(".draft-item")).toHaveLength(1);
+    expect(podNetworkMocks.saveDraftConditionally).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveState).not.toHaveBeenCalled();
+  });
+
+  it("removes a Catalog route immediately after adopting it and persists its stable identity", async () => {
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const catalogRoute = {
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      identifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      name: "Katalogroute",
+      description: "Ã–ffentliche Teststrecke",
+      publisher: "Tour Publisher",
+      datasetUrl: "https://pods.example/publisher/catalog/ds/route.ttl#it",
+      distributionUrl: "https://pods.example/publisher/public/route.geojson",
+      geometry: [[[7.3, 51.3], [7.4, 51.4]]] as [[number, number][]],
+      distanceMeters: 12_000,
+    };
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([catalogRoute]);
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => expect(container.querySelector(".catalog-adopt")).not.toBeNull());
+
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-adopt")!.click());
+
+    await waitForDom(() => {
+      expect(container.querySelector(".catalog-route-item")).toBeNull();
+      expect(container.querySelectorAll(".draft-item")).toHaveLength(2);
+    });
+    const adoptedDraftItem = Array.from(
+      container.querySelectorAll<HTMLElement>(".draft-item")
+    ).find((item) => item.textContent?.includes(catalogRoute.name));
+    expect(adoptedDraftItem).toBeDefined();
+    expect(adoptedDraftItem?.querySelector(".catalog-index")).toBeNull();
+    expect(podNetworkMocks.saveDraftConditionally).toHaveBeenCalledTimes(1);
+    expect(podNetworkMocks.saveDraftConditionally.mock.calls[0][1]).toMatchObject({
+      adoptedFromCatalog: {
+        routeTemplateId: catalogRoute.routeTemplateId,
+        datasetUrl: catalogRoute.datasetUrl,
+        distributionUrl: catalogRoute.distributionUrl,
+      },
+    });
+    expect(podNetworkMocks.saveState.mock.calls[0][1].drafts[0]).toMatchObject({
+      adoptedFromCatalog: {
+        routeTemplateId: catalogRoute.routeTemplateId,
+        datasetUrl: catalogRoute.datasetUrl,
+        distributionUrl: catalogRoute.distributionUrl,
+      },
+    });
+  });
+
+  it("keeps an adopted Catalog route hidden after Pod state is reloaded", async () => {
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const catalogRoute = {
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      identifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      name: "Renamed catalog route",
+      description: "Ã–ffentliche Teststrecke",
+      publisher: "Updated Publisher",
+      datasetUrl: "https://pods.example/publisher/catalog/ds/route.ttl#it",
+      distributionUrl: "https://pods.example/publisher/public/route.geojson",
+      geometry: [[[7.3, 51.3], [7.4, 51.4]]] as [[number, number][]],
+      distanceMeters: 12_000,
+    };
+    podNetworkMocks.loadState.mockResolvedValue({
+      ...localStateWithActivity,
+      drafts: [
+        {
+          id: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+          name: "Original catalog route name",
+          routeSource: "geojson",
+          geometry: catalogRoute.geometry,
+          adoptedFromCatalog: {
+            routeTemplateId: catalogRoute.routeTemplateId,
+            datasetUrl: catalogRoute.datasetUrl,
+            distributionUrl: catalogRoute.distributionUrl,
+          },
+          createdAt: "2026-08-20T12:00:00.000Z",
+          updatedAt: "2026-08-20T12:00:00.000Z",
+        },
+      ],
+    });
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([catalogRoute]);
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".catalog-routes-card")).not.toBeNull();
+      expect(container.querySelector(".catalog-route-item")).toBeNull();
+      expect(container.querySelector(".catalog-route-list .empty")).not.toBeNull();
+    });
+  });
+
+  it("does not offer the current Pod's indexed route as a Catalog adoption", async () => {
+    const podRoot = "https://pods.example/alex/";
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const routeTemplateId = "69020722-f94e-4d99-9aac-37b33d5607c7";
+    const datasetIdentifier = `${ROUTE_TEMPLATE_IDENTIFIER_PREFIX}${routeTemplateId}`;
+    const publication: RouteCatalogPublication = {
+      phase: "published",
+      phaseChangedAt: "2026-08-20T14:00:00.000Z",
+      routeTemplateId,
+      sourceDraftId: localStateWithActivity.drafts[0].id,
+      sourceDraftUpdatedAt: localStateWithActivity.drafts[0].updatedAt,
+      resourceUrl: `${podRoot}solid-tours/public/cataloged-routes/${routeTemplateId}.geojson`,
+      datasetIdentifier,
+      catalogDatasetUrl: `${podRoot}catalog/ds/${datasetIdentifier}.ttl#it`,
+      publishedAt: "2026-08-20T14:00:00.000Z",
+    };
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.loadState.mockResolvedValue({
+      ...localStateWithActivity,
+      catalogPublications: [publication],
+    });
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([
+      {
+        routeTemplateId,
+        identifier: datasetIdentifier,
+        name: "Rundweg A2 Ronsdorfer Talsperre",
+        description: "Public route",
+        publisher: "Hannah Mueller",
+        // Older aggregated Catalog records can omit creatorWebId. The private
+        // publication URLs still identify this as the current Pod's route.
+        datasetUrl: publication.catalogDatasetUrl,
+        distributionUrl: publication.resourceUrl,
+        geometry: localStateWithActivity.drafts[0].geometry,
+        distanceMeters: 13_100,
+      },
+    ]);
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+
+    await waitForDom(() => {
+      expect(container.querySelector(".catalog-routes-card")).not.toBeNull();
+      expect(container.querySelector(".catalog-route-item")).toBeNull();
+      expect(container.querySelector(".catalog-route-list .empty")).not.toBeNull();
+    });
+    expect(container.querySelector(".catalog-remove")).not.toBeNull();
+  });
+
+  it("adopts one ambiguous legacy match and keeps the other Catalog entry available", async () => {
+    const managerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const geometry = [[[7.3, 51.3], [7.4, 51.4]]] as [[number, number][]];
+    const firstRoute = {
+      routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+      identifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+      name: "Legacy duplicate",
+      description: "Public test route",
+      publisher: "Publisher A",
+      datasetUrl: "https://pods.example/a/catalog/ds/route.ttl#it",
+      distributionUrl: "https://pods.example/a/public/route.geojson",
+      geometry,
+      distanceMeters: 12_000,
+    };
+    const secondRoute = {
+      ...firstRoute,
+      routeTemplateId: "79020722-f94e-4d99-9aac-37b33d5607c7",
+      identifier: "solid-tours-route-template-79020722-f94e-4d99-9aac-37b33d5607c7",
+      publisher: "Publisher B",
+      datasetUrl: "https://pods.example/b/catalog/ds/route.ttl#it",
+      distributionUrl: "https://pods.example/b/public/route.geojson",
+    };
+    podNetworkMocks.loadState.mockResolvedValue({
+      ...localStateWithActivity,
+      drafts: [{
+        id: "8db47d3b-8a4f-4a74-b086-77c1c7630bf7",
+        name: firstRoute.name,
+        routeSource: "geojson",
+        geometry,
+        createdAt: "2026-08-20T12:00:00.000Z",
+        updatedAt: "2026-08-20T12:00:00.000Z",
+      }],
+    });
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([
+      firstRoute,
+      secondRoute,
+    ]);
+
+    act(() =>
+      root.render(
+        createElement(SolidToursEmbed, {
+          webId: NON_HANNAH_WEB_ID,
+          session: {
+            info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
+            fetch: managerFetch,
+          },
+        })
+      )
+    );
+    await waitForDom(() => {
+      expect(container.querySelectorAll(".catalog-adopt")).toHaveLength(2);
+    });
+
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>(".catalog-adopt")[0].click()
+    );
+
+    await waitForDom(() => {
+      expect(podNetworkMocks.saveDraftConditionally).toHaveBeenCalledOnce();
+      expect(container.querySelectorAll(".catalog-route-item")).toHaveLength(1);
+    });
+    expect(podNetworkMocks.saveDraftConditionally.mock.calls[0][1]).toMatchObject({
+      adoptedFromCatalog: {
+        routeTemplateId: firstRoute.routeTemplateId,
+        datasetUrl: firstRoute.datasetUrl,
+        distributionUrl: firstRoute.distributionUrl,
+      },
+    });
+    expect(container.querySelector(".catalog-route-item")?.textContent).toContain(
+      "Publisher B"
+    );
   });
 
   it("never sends a routing request when points are drawn", async () => {
@@ -1272,7 +2953,8 @@ describe("Solid Tours app shells", () => {
         })
       )
     );
-    await waitForDom(() => expect(container.querySelector(".save-draft-button")).not.toBeNull());
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
     const nameInput = container.querySelector<HTMLInputElement>(".panel-section--planner input")!;
     act(() => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;

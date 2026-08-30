@@ -41,6 +41,15 @@ describe("Solid Tours embed styles", () => {
     expect(css).toMatch(
       /\.solid-tours-app \.planner-scroll\s*\{[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s
     );
+    expect(css).toMatch(
+      /\.solid-tours-app \.planner-scroll\s*\{[^}]*scrollbar-color:\s*var\(--tours-scrollbar-thumb\) var\(--tours-scrollbar-track\)[^}]*scrollbar-gutter:\s*stable[^}]*scrollbar-width:\s*thin/s
+    );
+    expect(css).toMatch(
+      /\.solid-tours-app \.planner-scroll::\-webkit-scrollbar,[\s\S]*\.solid-tours-app \.catalog-confirmation-list::\-webkit-scrollbar\s*\{[^}]*width:\s*9px/s
+    );
+    expect(css).toMatch(
+      /\.solid-tours-app \.planner-panel\s*\{[^}]*overflow:\s*hidden/s
+    );
   });
 
   it("keeps zoom for other browsers and disables it only for Safari standalone roots", () => {
@@ -108,6 +117,18 @@ describe("Solid Tours embed styles", () => {
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
     expect(css).toMatch(
       /\.solid-tours-app \.completion-traveller[^}]*\{[^}]*animation:\s*none/s
+    );
+  });
+
+  it("keeps the boot loader scoped, indeterminate, and motion-safe", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/App.css"), "utf8");
+
+    expect(css).toMatch(
+      /\.solid-tours-app \.tours-loading-rail > span\s*\{[^}]*animation:\s*solid-tours-boot-progress/s
+    );
+    expect(css).toMatch(/@keyframes\s+solid-tours-boot-progress/);
+    expect(css).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.solid-tours-app \.tours-loading-rail > span,[\s\S]*animation:\s*none/s
     );
   });
 

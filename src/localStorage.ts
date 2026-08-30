@@ -12,6 +12,7 @@ const emptyState = (): ToursState => ({
   schemaVersion: 1,
   drafts: [],
   activities: [],
+  catalogPublications: [],
   activeRun: null,
 });
 
