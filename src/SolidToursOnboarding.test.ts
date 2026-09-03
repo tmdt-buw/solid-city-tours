@@ -74,6 +74,8 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     expect(donationItem?.textContent).toContain("public Catalog metadata");
     expect(donationItem?.textContent).toContain("WebID as creator");
     expect(donationItem?.textContent).toContain("contact email");
+    expect(donationItem?.textContent).toContain("only contribution");
+    expect(donationItem?.textContent).toContain("route can still be identifying");
   });
 
   it("names Publisher, Creator-WebID, and optional contact email in German", () => {
@@ -93,6 +95,8 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     expect(donationItem?.textContent).toContain("öffentlichen Katalogmetadaten");
     expect(donationItem?.textContent).toContain("WebID als Creator");
     expect(donationItem?.textContent).toContain("Kontakt-E-Mail");
+    expect(donationItem?.textContent).toContain("einzige Beitrag");
+    expect(donationItem?.textContent).toContain("identifizierbar");
   });
 
   it("keeps embedded onboarding strictly app-specific", () => {
