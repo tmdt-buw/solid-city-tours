@@ -9,9 +9,10 @@ explicitly publish one restricted GeoJSON scenario bundle per Pod at a time.
 The application, embed package (`@hoelk-f/city-tours`), Docker image
 (`son1i/city-tours`) and public routes (`/city-tours/`, `/web/city-tours`)
 use the City Tours name. Existing application links redirect to the new routes.
-The checkout directory and GitHub/GitLab repository names remain `solid-tours`
-until the separate repository rename; local Compose mounts and release scripts
-still point to that checkout.
+The GitHub repository is [solid-city-tours](https://github.com/hoelk-f/solid-city-tours).
+The local checkout directory and GitLab repository remain `solid-tours`; local
+Compose mounts and release scripts still point to that checkout. GitHub updates
+use its `origin` remote at `https://github.com/hoelk-f/solid-city-tours.git`.
 
 Persisted Pod paths, browser/session keys, onboarding records, catalog identifiers,
 RDF vocabulary IRIs and GeoJSON source/derivation identifiers intentionally retain
