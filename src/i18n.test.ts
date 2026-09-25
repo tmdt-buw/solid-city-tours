@@ -11,7 +11,7 @@ import {
   writeStoredToursLanguage,
 } from "./i18n";
 
-describe("Solid Tours language contract", () => {
+describe("City Tours language contract", () => {
   afterEach(() => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
@@ -26,7 +26,7 @@ describe("Solid Tours language contract", () => {
 
   it("uses URL language before the shared Dataspace storage preference", () => {
     window.localStorage.setItem(TOURS_LANGUAGE_STORAGE_KEY, "de");
-    window.history.replaceState({}, "", "/solid-tours/?language=en-GB");
+    window.history.replaceState({}, "", "/city-tours/?language=en-GB");
 
     expect(readStoredToursLanguage()).toBe("en");
   });

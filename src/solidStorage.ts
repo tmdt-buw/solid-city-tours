@@ -10,8 +10,8 @@ import {
 import { draftFeature, isUuidV4 } from "./domain";
 import { validateToursState } from "./stateValidation";
 import {
-  parseSolidToursOnboardingRecord,
-  type SolidToursOnboardingRecord,
+  parseCityToursOnboardingRecord,
+  type CityToursOnboardingRecord,
 } from "./appOnboarding";
 import {
   ROUTE_TEMPLATE_IDENTIFIER_PREFIX,
@@ -148,6 +148,7 @@ export async function ensureContainer(url: string, fetcher: SolidFetch): Promise
 }
 
 export function storageUrls(podRoot: string) {
+  // Stable storage namespace: renaming the app must preserve existing resources and ACLs.
   const tours = `${podRoot}solid-tours/`;
   return {
     tours,
@@ -329,23 +330,23 @@ export async function putPublicGeoJson(
   await setOwnerPublicReadResourceAccess(url, ownerWebId, fetcher);
 }
 
-export async function loadSolidToursOnboarding(
+export async function loadCityToursOnboarding(
   podRoot: string,
   fetcher: SolidFetch
-): Promise<SolidToursOnboardingRecord | null> {
+): Promise<CityToursOnboardingRecord | null> {
   const url = storageUrls(podRoot).onboarding;
   const response = await fetcher(url, {
     headers: { Accept: "application/json", "Cache-Control": "no-cache" },
     cache: "no-store",
     redirect: "error",
   });
-  assertExactResponseUrl(response, url, "Die Solid-Tours-Onboarding-Abfrage");
+  assertExactResponseUrl(response, url, "Die City-Tours-Onboarding-Abfrage");
   if (response.status === 404) return null;
   if (!response.ok) {
-    throw new Error(`Das Solid-Tours-Onboarding konnte nicht geladen werden (${response.status}).`);
+    throw new Error(`Das City-Tours-Onboarding konnte nicht geladen werden (${response.status}).`);
   }
   try {
-    return parseSolidToursOnboardingRecord(await response.json());
+    return parseCityToursOnboardingRecord(await response.json());
   } catch {
     // A malformed or unsupported private record must never be interpreted as
     // consent. Returning the same incomplete state as a missing record lets
@@ -355,14 +356,14 @@ export async function loadSolidToursOnboarding(
   }
 }
 
-export async function saveSolidToursOnboarding(
+export async function saveCityToursOnboarding(
   podRoot: string,
-  record: SolidToursOnboardingRecord,
+  record: CityToursOnboardingRecord,
   ownerWebId: string,
   fetcher: SolidFetch
 ): Promise<void> {
-  const validated = parseSolidToursOnboardingRecord(record);
-  if (!validated) throw new Error("Das Solid-Tours-Onboarding hat ein ungültiges Format.");
+  const validated = parseCityToursOnboardingRecord(record);
+  if (!validated) throw new Error("Das City-Tours-Onboarding hat ein ungültiges Format.");
   await putPrivateJson(storageUrls(podRoot).onboarding, validated, ownerWebId, fetcher);
 }
 
@@ -759,7 +760,7 @@ export async function loadStateSnapshot(
     cache: "no-store",
     redirect: "error",
   });
-  assertExactResponseUrl(response, stateUrl, "Die Solid-Tours-Statusabfrage");
+  assertExactResponseUrl(response, stateUrl, "Die City-Tours-Statusabfrage");
   if (response.status === 404) {
     const emptyState = { ...EMPTY_STATE, drafts: [], activities: [] };
     stateVersionByUrl.set(stateUrl, {
@@ -769,7 +770,7 @@ export async function loadStateSnapshot(
     });
     return { state: emptyState, etag: null };
   }
-  if (!response.ok) throw new Error(`Solid-Tours-Status konnte nicht geladen werden (${response.status}).`);
+  if (!response.ok) throw new Error(`City-Tours-Status konnte nicht geladen werden (${response.status}).`);
   const state = await response.json();
   const snapshot = {
     state: validateToursState(podRoot, { ...state, activeRun: state.activeRun || null }),
@@ -812,15 +813,15 @@ export async function saveState(
     await loadStateSnapshot(podRoot, fetcher);
     version = stateVersionByUrl.get(stateUrl);
   }
-  if (!version) throw new Error("Der Solid-Tours-Status konnte nicht versioniert werden.");
+  if (!version) throw new Error("Der City-Tours-Status konnte nicht versioniert werden.");
   if (version.fingerprint !== stateFingerprint(validatedBaseState)) {
     throw new StateConflictError(
-      "Der lokale Solid-Tours-Stand ist veraltet. Lade den aktuellen Pod-Stand neu, bevor du die Aktion wiederholst."
+      "Der lokale City-Tours-Stand ist veraltet. Lade den aktuellen Pod-Stand neu, bevor du die Aktion wiederholst."
     );
   }
   if (version.exists && !version.etag) {
     throw new Error(
-      "Der Pod liefert keinen starken Versionsnachweis. Der Solid-Tours-Status wurde nicht geändert."
+      "Der Pod liefert keinen starken Versionsnachweis. Der City-Tours-Status wurde nicht geändert."
     );
   }
   await writeStateConditionally(
@@ -880,7 +881,7 @@ async function reconcileStateWrite(
   } catch (reconciliationError) {
     throw new AggregateError(
       [originalError, reconciliationError],
-      "Das Solid-Tours-Status-Update konnte nicht eindeutig bestätigt werden. Lade Solid Tours neu."
+      "Das City-Tours-Status-Update konnte nicht eindeutig bestätigt werden. Lade City Tours neu."
     );
   }
 }
@@ -909,7 +910,7 @@ async function writeStateConditionally(
       },
       body: `${JSON.stringify(validatedState, null, 2)}\n`,
     });
-    assertExactResponseUrl(response, stateUrl, "Das Solid-Tours-Status-Update");
+    assertExactResponseUrl(response, stateUrl, "Das City-Tours-Status-Update");
   } catch (writeError) {
     return reconcileStateWrite(podRoot, validatedState, ownerWebId, fetcher, writeError);
   }
@@ -919,7 +920,7 @@ async function writeStateConditionally(
     // state fingerprint. A retry with stale UI state must abort before PUT.
     await loadStateSnapshot(podRoot, fetcher).catch(() => undefined);
     throw new StateConflictError(
-      "Der Solid-Tours-Status wurde zwischenzeitlich geändert. Die Aktion wurde nicht gespeichert."
+      "Der City-Tours-Status wurde zwischenzeitlich geändert. Die Aktion wurde nicht gespeichert."
     );
   }
   if (!response.ok) {
@@ -928,7 +929,7 @@ async function writeStateConditionally(
       validatedState,
       ownerWebId,
       fetcher,
-      new Error(`Solid-Tours-Status konnte nicht gespeichert werden (${response.status}).`)
+      new Error(`City-Tours-Status konnte nicht gespeichert werden (${response.status}).`)
     );
   }
 
@@ -937,7 +938,7 @@ async function writeStateConditionally(
     const verified = await loadStateSnapshot(podRoot, fetcher);
     if (JSON.stringify(verified.state) !== JSON.stringify(validatedState) || !verified.etag) {
       throw new Error(
-        "Das Solid-Tours-Status-Update konnte nicht mit einer eindeutigen Version bestätigt werden."
+        "Das City-Tours-Status-Update konnte nicht mit einer eindeutigen Version bestätigt werden."
       );
     }
     return verified;
@@ -1045,10 +1046,10 @@ const containsOnlyKeys = (value: Record<string, unknown>, allowed: Set<string>) 
   Object.keys(value).every((key) => allowed.has(key));
 
 /**
- * Convert a draft master written by an older Solid Tours version to the
+ * Convert a draft master written by an older City Tours version to the
  * current neutral-route representation used by state hydration.
  *
- * This is deliberately strict: only fields ever written by Solid Tours are
+ * This is deliberately strict: only fields ever written by City Tours are
  * accepted. A changed name, geometry, timestamp or unknown property still
  * fails the comparison below, so this compatibility path cannot overwrite a
  * concurrent or foreign edit.
@@ -1089,7 +1090,7 @@ function canonicalStoredDraft(value: unknown): TourDraft | null {
   }
 
   try {
-    const normalized = validateToursState("https://solid-tours.invalid/pod/", {
+    const normalized = validateToursState("https://city-tours.invalid/pod/", {
       schemaVersion: 1,
       drafts: [
         {

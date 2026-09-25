@@ -10,13 +10,15 @@ export const DEFAULT_DEMO_WEB_ID =
 export { hasSolidPodAccess };
 export type { ToursStorageMode };
 
-export type SolidToursRuntimeConfig = {
+export type CityToursRuntimeConfig = {
   demoWebId?: unknown;
 };
 
 declare global {
   interface Window {
-    __SOLID_TOURS_CONFIG__?: SolidToursRuntimeConfig;
+    __CITY_TOURS_CONFIG__?: CityToursRuntimeConfig;
+    /** @deprecated Use __CITY_TOURS_CONFIG__. */
+    __SOLID_TOURS_CONFIG__?: CityToursRuntimeConfig;
   }
 }
 
@@ -48,8 +50,10 @@ export function validateDemoWebId(value: unknown): string {
 
 export function resolveDemoWebId(
   explicitWebId?: string | null,
-  runtimeConfig: SolidToursRuntimeConfig | undefined =
-    typeof window === "undefined" ? undefined : window.__SOLID_TOURS_CONFIG__
+  runtimeConfig: CityToursRuntimeConfig | undefined =
+    typeof window === "undefined"
+      ? undefined
+      : window.__CITY_TOURS_CONFIG__ ?? window.__SOLID_TOURS_CONFIG__
 ): string {
   const hasExplicitWebId = explicitWebId !== undefined && explicitWebId !== null;
   if (

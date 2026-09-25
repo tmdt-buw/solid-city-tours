@@ -62,9 +62,9 @@
 .tours-onboarding__actions p { margin: 0; color: #8a5a18; font-size: .74rem; }
 .tours-onboarding__actions > div { display: flex; gap: .65rem; margin-left: auto; }
 
-.solid-tours-app--onboarding { display: flex; min-height: 0; }
-.solid-tours-app--standalone.solid-tours-app--onboarding { min-height: 100dvh; padding: 1rem; background: radial-gradient(circle at 12% 12%, #eaf3ff 0, transparent 32%), #f3f6fa; }
-.solid-tours-app--embedded.solid-tours-app--onboarding { height: 100%; padding: 1rem; background: #f3f6fa; }
+.city-tours-app--onboarding { display: flex; min-height: 0; }
+.city-tours-app--standalone.city-tours-app--onboarding { min-height: 100dvh; padding: 1rem; background: radial-gradient(circle at 12% 12%, #eaf3ff 0, transparent 32%), #f3f6fa; }
+.city-tours-app--embedded.city-tours-app--onboarding { height: 100%; padding: 1rem; background: #f3f6fa; }
 
 @media (max-width: 620px) {
   .tours-onboarding { width: calc(100% - 1rem); max-height: calc(100% - 1rem); padding: 1rem; border-radius: 12px; }

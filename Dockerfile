@@ -9,6 +9,6 @@ RUN npm run build:app
 
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/build /usr/share/nginx/html/solid-tours
+COPY --from=build /app/build /usr/share/nginx/html/city-tours
 EXPOSE 3006
 CMD ["nginx", "-g", "daemon off;"]

@@ -3,7 +3,7 @@ import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StandaloneLogin, {
   normalizeSolidIssuer,
-  SOLID_TOURS_PROVIDERS,
+  CITY_TOURS_PROVIDERS,
 } from "./StandaloneLogin";
 import type { ToursLanguage } from "./i18n";
 
@@ -58,11 +58,11 @@ describe("StandaloneLogin", () => {
 
   it("uses the recommended TMDT provider by default", () => {
     const onLogin = renderLogin();
-    const submit = container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")!;
+    const submit = container.querySelector<HTMLButtonElement>(".city-tours-login__submit")!;
 
     act(() => submit.click());
 
-    expect(onLogin).toHaveBeenCalledWith(SOLID_TOURS_PROVIDERS[0].url);
+    expect(onLogin).toHaveBeenCalledWith(CITY_TOURS_PROVIDERS[0].url);
     expect(container.querySelector("[aria-pressed='true']")?.textContent).toContain(
       "TMDT Solid"
     );
@@ -71,30 +71,30 @@ describe("StandaloneLogin", () => {
   it("matches the catalog login copy without account or demo explanations", () => {
     renderLogin();
 
-    expect(container.querySelector(".solid-tours-login__title")?.textContent).toBe(
-      "Solid Tours"
+    expect(container.querySelector(".city-tours-login__title")?.textContent).toBe(
+      "City Tours"
     );
     expect(container.textContent).not.toContain("Alle Solid-Konten");
     expect(container.textContent).not.toContain("Environmental Monitoring");
     expect(container.textContent).not.toContain("Demo-Konto");
     const languageControl = container.querySelector(
-      ".solid-tours-login__actions .solid-tours-login__language .language-toggle"
+      ".city-tours-login__actions .city-tours-login__language .language-toggle"
     );
     expect(languageControl).not.toBeNull();
-    expect(languageControl?.closest(".solid-tours-login__actions")).not.toBeNull();
-    expect(container.querySelector(".solid-tours-login__hero .solid-tours-login__language")).toBeNull();
+    expect(languageControl?.closest(".city-tours-login__actions")).not.toBeNull();
+    expect(container.querySelector(".city-tours-login__hero .city-tours-login__language")).toBeNull();
     expect(
-      container.querySelector(".solid-tours-login > .solid-tours-login__language")
+      container.querySelector(".city-tours-login > .city-tours-login__language")
     ).toBeNull();
     expect(languageControl?.parentElement?.nextElementSibling).toBe(
-      container.querySelector(".solid-tours-login__submit")
+      container.querySelector(".city-tours-login__submit")
     );
     const loginIcon = container.querySelector(
-      ".solid-tours-login__submit .fa-right-from-bracket"
+      ".city-tours-login__submit .fa-right-from-bracket"
     );
     expect(loginIcon).not.toBeNull();
     expect(loginIcon?.tagName.toLowerCase()).toBe("svg");
-    expect(container.querySelector(".solid-tours-login i.fa-solid")).toBeNull();
+    expect(container.querySelector(".city-tours-login i.fa-solid")).toBeNull();
   });
 
   it("disables login and announces an invalid custom issuer", () => {
@@ -106,10 +106,10 @@ describe("StandaloneLogin", () => {
     });
 
     expect(input.getAttribute("aria-invalid")).toBe("true");
-    expect(container.querySelector(".solid-tours-login__validation")?.getAttribute("role")).toBe(
+    expect(container.querySelector(".city-tours-login__validation")?.getAttribute("role")).toBe(
       "alert"
     );
-    expect(container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")?.disabled).toBe(
+    expect(container.querySelector<HTMLButtonElement>(".city-tours-login__submit")?.disabled).toBe(
       true
     );
   });
@@ -121,7 +121,7 @@ describe("StandaloneLogin", () => {
     act(() => {
       enterValue(input, " https://pods.example/ ");
     });
-    act(() => container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")!.click());
+    act(() => container.querySelector<HTMLButtonElement>(".city-tours-login__submit")!.click());
 
     expect(onLogin).toHaveBeenCalledWith("https://pods.example");
   });
@@ -132,10 +132,10 @@ describe("StandaloneLogin", () => {
     expect(container.querySelector("[role='alert']")?.textContent).toContain(
       "Anmeldung fehlgeschlagen"
     );
-    expect(container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")?.disabled).toBe(
+    expect(container.querySelector<HTMLButtonElement>(".city-tours-login__submit")?.disabled).toBe(
       true
     );
-    expect(container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")?.textContent).toContain(
+    expect(container.querySelector<HTMLButtonElement>(".city-tours-login__submit")?.textContent).toContain(
       "Weiterleitung"
     );
   });

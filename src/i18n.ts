@@ -47,7 +47,7 @@ const translations = {
   demoPodSession: { en: "Solid Pod", de: "Solid Pod" },
   solidConnected: { en: "Solid connected", de: "Solid verbunden" },
   logout: { en: "Log out", de: "Abmelden" },
-  workspace: { en: "Solid Tours workspace", de: "Solid Tours Arbeitsbereich" },
+  workspace: { en: "City Tours workspace", de: "City Tours Arbeitsbereich" },
   tourPlanner: { en: "Tour planner", de: "Tourenplaner" },
   newTour: { en: "New tour", de: "Neue Tour" },
   defaultTourName: { en: "New tour in Wuppertal", de: "Neue Tour in Wuppertal" },
@@ -237,7 +237,7 @@ const germanToEnglishErrors = new Map<string, string>([
   ["Die Solid-Sitzung konnte nicht wiederhergestellt werden. Bitte melde dich erneut an.", "The Solid session could not be restored. Please sign in again."],
   ["Die angeforderte WebID stimmt nicht mit der Solid-Sitzung ueberein.", "The requested WebID does not match the Solid session."],
   ["Der gespeicherte Verlauf konnte nicht geladen werden.", "The saved activity history could not be loaded."],
-  ["Solid Tours konnte nicht geladen werden.", "Solid Tours could not be loaded."],
+  ["City Tours konnte nicht geladen werden.", "City Tours could not be loaded."],
   ["Die Aktion ist fehlgeschlagen.", "The action failed."],
   ["Gib der Tour einen Namen.", "Enter a name for the tour."],
   ["Die Tour braucht mindestens zwei Punkte.", "The tour needs at least two points."],
@@ -259,7 +259,7 @@ const germanToEnglishErrors = new Map<string, string>([
   ["Die GPX-Datei ist ungültig.", "The GPX file is invalid."],
   ["GPX enthält keinen nutzbaren Track.", "The GPX file does not contain a usable track."],
   ["Unterstützt werden GPX-, GeoJSON- und JSON-Dateien.", "Supported file types are GPX, GeoJSON and JSON."],
-  ["Der gespeicherte Solid-Tours-Verlauf ist beschädigt.", "The saved Solid Tours history is corrupted."],
+  ["Der gespeicherte City-Tours-Verlauf ist beschädigt.", "The saved City Tours history is corrupted."],
   ["Der Browserspeicher ist nicht verfügbar.", "Browser storage is unavailable."],
   ["Die Demo-WebID-Konfiguration ist ungültig.", "The demo WebID configuration is invalid."],
   ["Die authentifizierte Solid-WebID ist ungültig.", "The authenticated Solid WebID is invalid."],
@@ -310,8 +310,8 @@ const germanToEnglishErrors = new Map<string, string>([
   ["Die Resource-ACL enthält weiterhin öffentliche Rechte.", "The resource ACL still contains public permissions."],
   ["Die Resource-ACL ist nicht mit Control-Zugriff erreichbar.", "The resource ACL is not accessible with Control permission."],
   ["Die Owner-WebID ist ungültig.", "The owner WebID is invalid."],
-  ["Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.", "The Solid Tours state has an invalid or unknown format."],
-  ["Der gespeicherte Solid-Tours-Status darf keinen veröffentlichten Szenariolauf enthalten.", "The saved Solid Tours state must not contain a published scenario run."],
+  ["Der City-Tours-Status hat ein ungültiges oder unbekanntes Format.", "The City Tours state has an invalid or unknown format."],
+  ["Der gespeicherte City-Tours-Status darf keinen veröffentlichten Szenariolauf enthalten.", "The saved City Tours state must not contain a published scenario run."],
 ]);
 
 const germanMessagePattern = /(?:\b(?:Die|Der|Das|Ein|Eine|Bitte|Wähle|Setze|Gib|Für|Veröffentlichung|Löschen|Interessen|Szenariolauf|Aktivität|Tourentwurf|Anmeldung|Unsichere|enthaltene)\b|[äöüßÄÖÜ]|\b(?:konnte|nicht|ungültig|geändert|gelöscht|zurückgesetzt|vorhanden|fehlgeschlagen)\b)/;
@@ -333,7 +333,7 @@ export function localizeUserFacingMessage(
   if (invalidGermanDate) return `Invalid date. Enter an existing calendar date in ${invalidGermanDate[1]} format.`;
 
   const statusTranslations: Array<[RegExp, string]> = [
-    [/^Solid-Tours-Status konnte nicht geladen werden \((\d+)\)\.$/, "The Solid Tours state could not be loaded ($1)."],
+    [/^City-Tours-Status konnte nicht geladen werden \((\d+)\)\.$/, "The City Tours state could not be loaded ($1)."],
     [/^Die private Aktivität konnte nicht (geladen|gelöscht|geprüft) werden \((\d+)\)\.$/, "The private activity request failed ($2)."],
     [/^Die Resource konnte nicht geprüft werden \((\d+)\)\.$/, "The resource could not be verified ($1)."],
     [/^Die Resource-ACL konnte nicht geprüft werden \((\d+)\)\.$/, "The resource ACL could not be verified ($1)."],

@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-type SolidToursIconName =
+type CityToursIconName =
   | "route"
   | "circle-user"
   | "right-from-bracket"
@@ -18,10 +18,10 @@ interface IconDefinition {
  * Icons are licensed under CC BY 4.0; Font Awesome code is licensed under MIT.
  * Source and license: https://fontawesome.com/license/free
  *
- * Keeping the paths used by Solid Tours here avoids a runtime dependency
+ * Keeping the paths used by City Tours here avoids a runtime dependency
  * on the external Font Awesome stylesheet while preserving the catalog's icons.
  */
-const ICONS: Record<SolidToursIconName, IconDefinition> = {
+const ICONS: Record<CityToursIconName, IconDefinition> = {
   route: {
     width: 512,
     height: 512,
@@ -50,7 +50,7 @@ const ICONS: Record<SolidToursIconName, IconDefinition> = {
 };
 
 export interface FontAwesomeIconProps extends Omit<SVGProps<SVGSVGElement>, "children"> {
-  icon: SolidToursIconName;
+  icon: CityToursIconName;
 }
 
 export default function FontAwesomeIcon({
@@ -59,7 +59,7 @@ export default function FontAwesomeIcon({
   ...props
 }: FontAwesomeIconProps) {
   const definition = ICONS[icon];
-  const classes = `solid-tours-fa-icon fa-solid fa-${icon}${className ? ` ${className}` : ""}`;
+  const classes = `city-tours-fa-icon fa-solid fa-${icon}${className ? ` ${className}` : ""}`;
 
   return (
     <svg

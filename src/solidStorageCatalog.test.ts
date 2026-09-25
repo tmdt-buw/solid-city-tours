@@ -22,9 +22,9 @@ import { createRouteTemplateSnapshot } from "./routeTemplates";
 import {
   PublicRouteTemplateConflictError,
   loadDraftMasterResourceSnapshot,
-  loadSolidToursOnboarding,
+  loadCityToursOnboarding,
   savePublicRouteTemplate,
-  saveSolidToursOnboarding,
+  saveCityToursOnboarding,
   storageUrls,
   updatePublicRouteTemplateConditionally,
 } from "./solidStorage";
@@ -55,7 +55,7 @@ const readBlobText = (blob: Blob) =>
     reader.readAsText(blob);
   });
 
-describe("Solid Tours onboarding storage", () => {
+describe("City Tours onboarding storage", () => {
   beforeEach(() => {
     solidClientMocks.overwriteFile.mockReset();
     ownerAclMocks.setOwnerOnlyResourceAccess.mockReset();
@@ -71,7 +71,7 @@ describe("Solid Tours onboarding storage", () => {
       responseAt(onboardingUrl, null, { status: 404 })
     );
 
-    await expect(loadSolidToursOnboarding(POD_ROOT, fetcher)).resolves.toBeNull();
+    await expect(loadCityToursOnboarding(POD_ROOT, fetcher)).resolves.toBeNull();
     expect(fetcher).toHaveBeenCalledWith(onboardingUrl, {
       headers: { Accept: "application/json", "Cache-Control": "no-cache" },
       cache: "no-store",
@@ -96,7 +96,7 @@ describe("Solid Tours onboarding storage", () => {
       })
     );
 
-    await expect(loadSolidToursOnboarding(POD_ROOT, fetcher)).resolves.toEqual(record);
+    await expect(loadCityToursOnboarding(POD_ROOT, fetcher)).resolves.toEqual(record);
 
     const redirectedFetcher = vi.fn<typeof fetch>(async () =>
       responseAt("https://attacker.example/onboarding.json", JSON.stringify(record), {
@@ -104,14 +104,14 @@ describe("Solid Tours onboarding storage", () => {
       })
     );
     await expect(
-      loadSolidToursOnboarding(POD_ROOT, redirectedFetcher)
+      loadCityToursOnboarding(POD_ROOT, redirectedFetcher)
     ).rejects.toThrow(/anderes Ziel/);
 
     const extendedFetcher = vi.fn<typeof fetch>(async () =>
       responseAt(onboardingUrl, JSON.stringify({ ...record, admin: true }), { status: 200 })
     );
     await expect(
-      loadSolidToursOnboarding(POD_ROOT, extendedFetcher)
+      loadCityToursOnboarding(POD_ROOT, extendedFetcher)
     ).resolves.toBeNull();
   });
 
@@ -135,8 +135,8 @@ describe("Solid Tours onboarding storage", () => {
       })
     );
 
-    await expect(loadSolidToursOnboarding(POD_ROOT, newerFetcher)).resolves.toBeNull();
-    await expect(loadSolidToursOnboarding(POD_ROOT, malformedFetcher)).resolves.toBeNull();
+    await expect(loadCityToursOnboarding(POD_ROOT, newerFetcher)).resolves.toBeNull();
+    await expect(loadCityToursOnboarding(POD_ROOT, malformedFetcher)).resolves.toBeNull();
     expect(solidClientMocks.overwriteFile).not.toHaveBeenCalled();
     expect(ownerAclMocks.setOwnerOnlyResourceAccess).not.toHaveBeenCalled();
   });
@@ -147,7 +147,7 @@ describe("Solid Tours onboarding storage", () => {
       responseAt(onboardingUrl, "unavailable", { status: 503 })
     );
 
-    await expect(loadSolidToursOnboarding(POD_ROOT, fetcher)).rejects.toThrow(/503/);
+    await expect(loadCityToursOnboarding(POD_ROOT, fetcher)).rejects.toThrow(/503/);
   });
 
   it("stores the onboarding record owner-only", async () => {
@@ -160,7 +160,7 @@ describe("Solid Tours onboarding storage", () => {
     );
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 404 }));
 
-    await saveSolidToursOnboarding(POD_ROOT, record, WEB_ID, fetcher);
+    await saveCityToursOnboarding(POD_ROOT, record, WEB_ID, fetcher);
 
     expect(fetcher).toHaveBeenCalledWith(
       onboardingUrl,
@@ -185,7 +185,7 @@ describe("Solid Tours onboarding storage", () => {
     const fetcher = vi.fn<typeof fetch>();
 
     await expect(
-      saveSolidToursOnboarding(
+      saveCityToursOnboarding(
         POD_ROOT,
         {
           schemaVersion: 2,

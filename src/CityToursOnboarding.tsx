@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import FontAwesomeIcon from "./FontAwesomeIcon";
 import type { ToursLanguage } from "./i18n";
-import type { SolidToursOnboardingContext } from "./appOnboarding";
+import type { CityToursOnboardingContext } from "./appOnboarding";
 import type { PublicRegistryOption } from "./catalog";
-import "./SolidToursOnboarding.css";
+import "./CityToursOnboarding.css";
 
 type AppOnboardingProps = {
-  context: SolidToursOnboardingContext;
+  context: CityToursOnboardingContext;
   language: ToursLanguage;
   podRoot: string;
   registryOptions: PublicRegistryOption[];
@@ -26,9 +26,9 @@ type AppOnboardingProps = {
 
 const copy = {
   en: {
-    eyebrow: "SOLID TOURS SETUP",
+    eyebrow: "CITY TOURS SETUP",
     title: "Your tours, under your control",
-    intro: "Before Solid Tours creates its private app space, choose how the app may work with your Pod.",
+    intro: "Before City Tours creates its private app space, choose how the app may work with your Pod.",
     privateTitle: "Private tour space",
     privateText: "Create owner-only folders for drafts, completed tours and app settings.",
     derivedTitle: "Derived activity values",
@@ -42,26 +42,26 @@ const copy = {
     donationTitle: "Health data donation",
     donationText: "A donation is a separate restricted snapshot. Environmental Monitoring must request read access. Its public Catalog metadata includes your publisher name, your WebID as creator and, when available in your Solid profile, your contact email. After you approve read access, your route and derived activity statistics may appear publicly even when yours is the only contribution. WebID and direct Pod URLs are removed from the aggregate, but the route can still be identifying.",
     standaloneTitle: "Independent app setup",
-    standaloneText: "Solid Tours performs these app-specific Pod changes itself. You do not need to complete the Dataspace Manager onboarding first.",
-    registryChoice: "Public registry for Solid Tours",
+    standaloneText: "City Tours performs these app-specific Pod changes itself. You do not need to complete the Dataspace Manager onboarding first.",
+    registryChoice: "Public registry for City Tours",
     profileTitle: "Public Catalog identity",
-    profileText: "After your confirmation, Solid Tours stores these values in your own WebID profile. They are published as the publisher and contact metadata of your public Catalog entries.",
+    profileText: "After your confirmation, City Tours stores these values in your own WebID profile. They are published as the publisher and contact metadata of your public Catalog entries.",
     publisherLabel: "Publisher name",
     contactEmailLabel: "Contact email",
     profileRequired: "Enter a publisher name and a valid contact email.",
     profileManagerRequired: "Complete your publisher name and contact email in Profile Manager before setting up the embedded app.",
     configured: "Already configured",
-    noRegistry: "No approved public research registry is available. Solid Tours cannot complete its public setup.",
+    noRegistry: "No approved public research registry is available. City Tours cannot complete its public setup.",
     generalOnboardingRequired: "Complete the general Dataspace onboarding before setting up the embedded app.",
-    confirm: "Set up Solid Tours",
+    confirm: "Set up City Tours",
     logout: "Log out",
     destination: "Private app location",
     required: "Select every acknowledgement to continue.",
   },
   de: {
-    eyebrow: "SOLID TOURS EINRICHTUNG",
+    eyebrow: "CITY TOURS EINRICHTUNG",
     title: "Deine Touren, unter deiner Kontrolle",
-    intro: "Bevor Solid Tours seinen privaten App-Bereich anlegt, legst du fest, wie die App mit deinem Pod arbeiten darf.",
+    intro: "Bevor City Tours seinen privaten App-Bereich anlegt, legst du fest, wie die App mit deinem Pod arbeiten darf.",
     privateTitle: "Privater Tourbereich",
     privateText: "Owner-only Ordner für Entwürfe, gemachte Touren und App-Einstellungen anlegen.",
     derivedTitle: "Abgeleitete Aktivitätswerte",
@@ -75,18 +75,18 @@ const copy = {
     donationTitle: "Gesundheitsdatenspende",
     donationText: "Eine Spende ist ein separater Restricted Snapshot. Environmental Monitoring muss Lesezugriff anfragen. Die öffentlichen Katalogmetadaten enthalten deinen Publisher-Namen, deine WebID als Creator und, sofern im Solid-Profil vorhanden, deine Kontakt-E-Mail. Nach deiner Lesefreigabe können deine Route und die daraus abgeleiteten Aktivitätsstatistiken bereits öffentlich erscheinen, wenn deine Spende der einzige Beitrag ist. WebID und direkte Pod-URLs werden aus dem Aggregat entfernt, die Route kann dich dennoch identifizierbar machen.",
     standaloneTitle: "Eigenständige App-Einrichtung",
-    standaloneText: "Solid Tours führt diese app-spezifischen Pod-Änderungen selbst aus. Du musst das Onboarding im Dataspace Manager dafür nicht zuerst abschließen.",
-    registryChoice: "Öffentliche Registry für Solid Tours",
+    standaloneText: "City Tours führt diese app-spezifischen Pod-Änderungen selbst aus. Du musst das Onboarding im Dataspace Manager dafür nicht zuerst abschließen.",
+    registryChoice: "Öffentliche Registry für City Tours",
     profileTitle: "Öffentliche Katalogidentität",
-    profileText: "Nach deiner Bestätigung speichert Solid Tours diese Werte in deinem eigenen WebID-Profil. Sie werden als Publisher- und Kontaktmetadaten deiner öffentlichen Katalogeinträge veröffentlicht.",
+    profileText: "Nach deiner Bestätigung speichert City Tours diese Werte in deinem eigenen WebID-Profil. Sie werden als Publisher- und Kontaktmetadaten deiner öffentlichen Katalogeinträge veröffentlicht.",
     publisherLabel: "Publisher-Name",
     contactEmailLabel: "Kontakt-E-Mail",
     profileRequired: "Gib einen Publisher-Namen und eine gültige Kontakt-E-Mail ein.",
     profileManagerRequired: "Vervollständige vor der Einrichtung der eingebetteten App deinen Publisher-Namen und deine Kontakt-E-Mail im Profile Manager.",
     configured: "Bereits konfiguriert",
-    noRegistry: "Es ist keine freigegebene öffentliche Forschungs-Registry verfügbar. Solid Tours kann seine öffentliche Einrichtung nicht abschließen.",
+    noRegistry: "Es ist keine freigegebene öffentliche Forschungs-Registry verfügbar. City Tours kann seine öffentliche Einrichtung nicht abschließen.",
     generalOnboardingRequired: "Schließe vor der Einrichtung der eingebetteten App das allgemeine Dataspace-Onboarding ab.",
-    confirm: "Solid Tours einrichten",
+    confirm: "City Tours einrichten",
     logout: "Abmelden",
     destination: "Privater App-Speicherort",
     required: "Bestätige alle Hinweise, um fortzufahren.",
@@ -184,11 +184,11 @@ export default function AppOnboarding({
           <p>{c.profileText}</p>
           <label>
             <span>{c.publisherLabel}</span>
-            <input type="text" name="solid-tours-publisher" autoComplete="name" maxLength={160} required disabled={busy} value={publisher} onChange={(event) => setPublisher(event.target.value)} />
+            <input type="text" name="city-tours-publisher" autoComplete="name" maxLength={160} required disabled={busy} value={publisher} onChange={(event) => setPublisher(event.target.value)} />
           </label>
           <label>
             <span>{c.contactEmailLabel}</span>
-            <input type="email" name="solid-tours-contact-email" autoComplete="email" maxLength={254} required disabled={busy} value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} />
+            <input type="email" name="city-tours-contact-email" autoComplete="email" maxLength={254} required disabled={busy} value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} />
           </label>
           {(!validPublisher || !validEmail) && <p role="alert">{c.profileRequired}</p>}
         </fieldset>
@@ -207,7 +207,7 @@ export default function AppOnboarding({
               >
                 <input
                   type="radio"
-                  name="solid-tours-public-registry"
+                  name="city-tours-public-registry"
                   value={option.url}
                   checked={selectedRegistry === option.url}
                   disabled={busy}

@@ -123,6 +123,6 @@ describe("browser-local tour state", () => {
         { ...state, activeRun: {} as ToursState["activeRun"] },
         memoryStorage()
       )
-    ).toThrow(/gespeicherte Solid-Tours-Status/);
+    ).toThrow(/gespeicherte City-Tours-Status/);
   });
 });

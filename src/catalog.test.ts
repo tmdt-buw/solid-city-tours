@@ -65,7 +65,7 @@ import {
 const HANNAH_WEB_ID =
   "https://solid-community-server.tmdt.info/sscon/profile/card#me";
 
-describe("Solid Tours catalog publication", () => {
+describe("City Tours catalog publication", () => {
   beforeEach(() => {
     catalogApiMocks.discoverPublicDatasets.mockReset();
     catalogApiMocks.ensurePublicCatalogReadiness.mockReset();
@@ -310,7 +310,7 @@ describe("Solid Tours catalog publication", () => {
   });
 });
 
-describe("Solid Tours public route Catalog", () => {
+describe("City Tours public route Catalog", () => {
   const routeTemplateId = "49f3344a-e58b-4f6a-a874-84e3815620e6";
   const identifier = `${ROUTE_TEMPLATE_IDENTIFIER_PREFIX}${routeTemplateId}`;
   const podRoot = "https://pod.example/hannah/";
@@ -373,7 +373,7 @@ describe("Solid Tours public route Catalog", () => {
         podRoot,
         identifier,
         title: "Nordbahntrasse",
-        description: "Public reusable route template from Solid Tours.",
+        description: "Public reusable route template from City Tours.",
         distributionUrl: resourceUrl,
         mediaType: "application/geo+json",
         publisher: "Hannah Mueller",
@@ -486,7 +486,7 @@ describe("Solid Tours public route Catalog", () => {
       {
         podRoot,
         registryUrl: registry.url,
-        catalogTitle: "Solid Tours Catalog",
+        catalogTitle: "City Tours Catalog",
       }
     );
   });

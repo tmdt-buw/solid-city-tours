@@ -71,7 +71,7 @@ const normalizePodRoot = (value: string): string => {
   return url.href;
 };
 
-const solidToursInboxContext = (webId: string, podRoot: string) => {
+const cityToursInboxContext = (webId: string, podRoot: string) => {
   let identity: URL;
   try {
     identity = new URL(webId);
@@ -105,7 +105,7 @@ const inboxAcl = async (inboxUrl: string, fetcher: SolidFetch) => {
   throw new Error("Die Solid-Inbox-ACL ist nicht mit Control-Zugriff erreichbar.");
 };
 
-export async function getSolidToursInboxReadiness({
+export async function getCityToursInboxReadiness({
   webId,
   podRoot,
   fetcher,
@@ -114,7 +114,7 @@ export async function getSolidToursInboxReadiness({
   podRoot: string;
   fetcher: SolidFetch;
 }): Promise<{ configured: boolean; inboxUrl: string }> {
-  const { inboxUrl } = solidToursInboxContext(webId, podRoot);
+  const { inboxUrl } = cityToursInboxContext(webId, podRoot);
   let linkedInbox: string | null;
   try {
     linkedInbox = await resolveSolidInbox(webId, fetcher);
@@ -142,7 +142,7 @@ export async function getSolidToursInboxReadiness({
   }
 }
 
-export async function ensureSolidToursInbox({
+export async function ensureCityToursInbox({
   webId,
   podRoot,
   fetcher,
@@ -151,7 +151,7 @@ export async function ensureSolidToursInbox({
   podRoot: string;
   fetcher: SolidFetch;
 }): Promise<string> {
-  const { inboxUrl, profileUrl } = solidToursInboxContext(webId, podRoot);
+  const { inboxUrl, profileUrl } = cityToursInboxContext(webId, podRoot);
   try {
     await getSolidDataset(inboxUrl, { fetch: fetcher });
   } catch (error) {
@@ -240,7 +240,7 @@ function revocationDecision(request: ScenarioRequest, ownerWebId: string, archiv
     `  sdm:datasetIdentifier "${escapeLiteral(request.datasetIdentifier)}";`,
     `  sdm:datasetAccessUrl <${request.datasetAccessUrl}>;`,
     '  sdm:applicationId "environmental-monitoring";',
-    '  sdm:decisionComment "Scenario reset in Solid Tours.";',
+    '  sdm:decisionComment "Scenario reset in City Tours.";',
     "  .",
   ].join("\n");
 }
@@ -336,7 +336,7 @@ export async function revokeAndArchiveScenarioAccess({
     updated = setDatetime(updated, `${SDM}decidedAt`, new Date(archivedAt));
     updated = setDatetime(updated, `${SDM}archivedAt`, new Date(archivedAt));
     updated = setUrl(updated, `${SDM}decidedBy`, ownerWebId);
-    updated = setStringNoLocale(updated, `${SDM}decisionComment`, "Scenario reset in Solid Tours.");
+    updated = setStringNoLocale(updated, `${SDM}decisionComment`, "Scenario reset in City Tours.");
     await saveSolidDatasetAt(request.resourceUrl, setThing(request.dataset, updated), {
       fetch: authenticatedFetch,
     });

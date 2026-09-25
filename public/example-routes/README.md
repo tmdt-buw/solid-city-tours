@@ -1,4 +1,4 @@
-# Solid Tours example routes
+# City Tours example routes
 
 These three GeoJSON files contain real walking and cycling routes in and around Wuppertal.
 They were generated on 2026-08-20 from the listed OpenStreetMap route relations. Waymarked

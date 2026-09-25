@@ -42,7 +42,7 @@ export function createDistPackageManifest(source: SourcePackage): string {
 
 export function distPackageManifestPlugin(source: SourcePackage): Plugin {
   return {
-    name: "solid-tours-dist-package-manifest",
+    name: "city-tours-dist-package-manifest",
     apply: "build",
     generateBundle() {
       this.emitFile({

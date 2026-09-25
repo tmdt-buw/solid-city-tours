@@ -104,7 +104,7 @@ describe("public route templates", () => {
     const route = catalogedRouteFromSnapshot(
       {
         identifier: `${ROUTE_TEMPLATE_IDENTIFIER_PREFIX}${ROUTE_TEMPLATE_ID}`,
-        description: "Public reusable route template from Solid Tours.",
+        description: "Public reusable route template from City Tours.",
         publisher: "Hannah Mueller",
         creatorWebId: "https://pod.example/hannah/profile/card#me",
         datasetUrl: "https://pod.example/hannah/catalog/ds/route.ttl#it",

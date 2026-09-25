@@ -5,7 +5,7 @@ describe("library package manifest", () => {
   it("describes only the files and runtime dependencies shipped in dist", () => {
     const manifest = JSON.parse(
       createDistPackageManifest({
-        name: "@example/solid-tours",
+        name: "@example/city-tours",
         version: "1.2.3",
         license: "Apache-2.0",
         publishConfig: { registry: "https://npm.pkg.github.com" },
@@ -25,7 +25,7 @@ describe("library package manifest", () => {
     );
 
     expect(manifest).toMatchObject({
-      name: "@example/solid-tours",
+      name: "@example/city-tours",
       version: "1.2.3",
       main: "./index.cjs",
       module: "./index.js",

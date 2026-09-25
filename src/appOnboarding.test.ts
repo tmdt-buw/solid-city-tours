@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   completeOnboardingRecord,
   onboardingCompleteFor,
-  parseSolidToursOnboardingRecord,
+  parseCityToursOnboardingRecord,
 } from "./appOnboarding";
 
 const APP_ACCEPTED_AT = "2026-08-28T08:00:00.000Z";
 const STANDALONE_ACCEPTED_AT = "2026-08-28T08:05:00.000Z";
 const REGISTRY_URL = "https://registry.example/research";
 
-describe("Solid Tours app onboarding record", () => {
+describe("City Tours app onboarding record", () => {
   it("records app-specific public setup consent for the embedded context", () => {
     const record = completeOnboardingRecord(
       null,
@@ -78,23 +78,23 @@ describe("Solid Tours app onboarding record", () => {
       publicRegistryUrl: REGISTRY_URL,
       standaloneAcceptedAt: STANDALONE_ACCEPTED_AT,
     };
-    expect(parseSolidToursOnboardingRecord(valid)).toEqual(valid);
-    expect(parseSolidToursOnboardingRecord({ ...valid, app: "other-app" })).toBeNull();
-    expect(parseSolidToursOnboardingRecord({ ...valid, schemaVersion: 3 })).toBeNull();
+    expect(parseCityToursOnboardingRecord(valid)).toEqual(valid);
+    expect(parseCityToursOnboardingRecord({ ...valid, app: "other-app" })).toBeNull();
+    expect(parseCityToursOnboardingRecord({ ...valid, schemaVersion: 3 })).toBeNull();
     expect(
-      parseSolidToursOnboardingRecord({ ...valid, appSpecificAcceptedAt: "2026-08-28" })
+      parseCityToursOnboardingRecord({ ...valid, appSpecificAcceptedAt: "2026-08-28" })
     ).toBeNull();
     expect(
-      parseSolidToursOnboardingRecord({ ...valid, publicRegistryUrl: `${REGISTRY_URL}/` })
+      parseCityToursOnboardingRecord({ ...valid, publicRegistryUrl: `${REGISTRY_URL}/` })
     ).toBeNull();
-    expect(parseSolidToursOnboardingRecord({ ...valid, unexpected: true })).toBeNull();
+    expect(parseCityToursOnboardingRecord({ ...valid, unexpected: true })).toBeNull();
   });
 
   it("does not consider missing, legacy or malformed records complete", () => {
     expect(onboardingCompleteFor(null, "embedded")).toBe(false);
     expect(onboardingCompleteFor(null, "standalone")).toBe(false);
     expect(
-      parseSolidToursOnboardingRecord({
+      parseCityToursOnboardingRecord({
         schemaVersion: 1,
         app: "solid-tours",
         appSpecificAcceptedAt: APP_ACCEPTED_AT,
@@ -102,7 +102,7 @@ describe("Solid Tours app onboarding record", () => {
     ).toBeNull();
     expect(
       onboardingCompleteFor(
-        parseSolidToursOnboardingRecord({
+        parseCityToursOnboardingRecord({
           schemaVersion: 2,
           app: "solid-tours",
           appSpecificAcceptedAt: "not-a-date",
@@ -115,7 +115,7 @@ describe("Solid Tours app onboarding record", () => {
   });
 
   it("turns an unsupported future record into an unaccepted but repairable state", () => {
-    const unsupported = parseSolidToursOnboardingRecord({
+    const unsupported = parseCityToursOnboardingRecord({
       schemaVersion: 3,
       app: "solid-tours",
       appSpecificAcceptedAt: APP_ACCEPTED_AT,
@@ -133,7 +133,7 @@ describe("Solid Tours app onboarding record", () => {
       REGISTRY_URL,
       STANDALONE_ACCEPTED_AT
     );
-    expect(parseSolidToursOnboardingRecord(repaired)).toEqual(repaired);
+    expect(parseCityToursOnboardingRecord(repaired)).toEqual(repaired);
     expect(onboardingCompleteFor(repaired, "embedded")).toBe(true);
   });
 

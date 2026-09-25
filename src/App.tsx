@@ -24,8 +24,8 @@ import {
   removeCatalogEntry,
 } from "./catalog";
 import {
-  ensureSolidToursInbox,
-  getSolidToursInboxReadiness,
+  ensureCityToursInbox,
+  getCityToursInboxReadiness,
   revokeAndArchiveScenarioAccess,
 } from "./accessRequests";
 import {
@@ -58,7 +58,7 @@ import {
   loadDraftMasterSnapshot,
   loadDraftMasterResourceSnapshot,
   loadPublicRouteTemplateResourceSnapshot,
-  loadSolidToursOnboarding,
+  loadCityToursOnboarding,
   loadState,
   loadStateSnapshot,
   resolvePodRoot,
@@ -71,7 +71,7 @@ import {
   savePublicRouteTemplate,
   updatePublicRouteTemplateConditionally,
   saveRunSnapshot,
-  saveSolidToursOnboarding,
+  saveCityToursOnboarding,
   saveState,
   saveStateIfUnchanged,
   storageUrls,
@@ -101,11 +101,11 @@ import { validateActiveRun } from "./stateValidation";
 import { initializeOnce } from "./mapLifecycle";
 import StandaloneLogin from "./StandaloneLogin";
 import LanguageToggle from "./LanguageToggle";
-import SolidToursOnboarding from "./SolidToursOnboarding";
+import CityToursOnboarding from "./CityToursOnboarding";
 import {
   completeOnboardingRecord,
   onboardingCompleteFor,
-  type SolidToursOnboardingRecord,
+  type CityToursOnboardingRecord,
 } from "./appOnboarding";
 import {
   DEFAULT_TOURS_LANGUAGE,
@@ -119,7 +119,7 @@ import {
   type ToursTranslationKey,
 } from "./i18n";
 import { appVersion } from "./version";
-import type { SolidFetch, SolidToursSession } from "./embedAuth";
+import type { SolidFetch, CityToursSession } from "./embedAuth";
 import {
   loadSolidProfileSummary,
   type SolidProfileSummary,
@@ -237,7 +237,7 @@ export type ToursAppProps = {
   /** @deprecated Pod access is available to every authenticated Solid identity. */
   demoWebIdOverride?: string | null;
   language?: string | null;
-  session?: SolidToursSession | null;
+  session?: CityToursSession | null;
 };
 
 function getHostBridge(): HostAuthBridge | null {
@@ -620,7 +620,7 @@ export default function App({
   const [podRoot, setPodRoot] = useState<string | null>(null);
   const [state, setState] = useState<ToursState>({ ...EMPTY_STATE, drafts: [], activities: [] });
   const [onboardingRecord, setOnboardingRecord] =
-    useState<SolidToursOnboardingRecord | null>(null);
+    useState<CityToursOnboardingRecord | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
   const [onboardingInfrastructureReady, setOnboardingInfrastructureReady] =
     useState(false);
@@ -777,13 +777,13 @@ export default function App({
       setWebId(auth.webId);
       setSolidFetch(() => fetcher);
       setPodRoot(root);
-      const record = await loadSolidToursOnboarding(root, fetcher);
+      const record = await loadCityToursOnboarding(root, fetcher);
       if (revision !== authRevision.current) return;
       setOnboardingRecord(record);
       const onboardingContext = embedded ? "embedded" : "standalone";
       const [catalogReadiness, inboxReadiness, profileMetadata] = await Promise.all([
         loadRouteCatalogReadiness({ podRoot: root, webId: auth.webId, fetcher }),
-        getSolidToursInboxReadiness({
+        getCityToursInboxReadiness({
           podRoot: root,
           webId: auth.webId,
           fetcher,
@@ -848,7 +848,7 @@ export default function App({
       activateState(stored);
     } catch (reason) {
       if (revision !== authRevision.current) return;
-      setError(reason instanceof Error ? reason.message : "Solid Tours konnte nicht geladen werden.");
+      setError(reason instanceof Error ? reason.message : "City Tours konnte nicht geladen werden.");
     } finally {
       if (revision === authRevision.current) setLoading(false);
     }
@@ -1070,7 +1070,7 @@ export default function App({
       if (embedded) {
         const [readiness, inboxReadiness, profileMetadata] = await Promise.all([
           loadRouteCatalogReadiness({ podRoot, webId, fetcher: solidFetch }),
-          getSolidToursInboxReadiness({ podRoot, webId, fetcher: solidFetch }),
+          getCityToursInboxReadiness({ podRoot, webId, fetcher: solidFetch }),
           loadCatalogProfileMetadata(webId, solidFetch),
         ]);
         assertCurrentAuthContext();
@@ -1112,7 +1112,7 @@ export default function App({
         assertCurrentAuthContext();
         // Both operations update the WebID profile. Keep them sequential so
         // Catalog setup preserves the freshly linked ldp:inbox value.
-        await ensureSolidToursInbox({ podRoot, webId, fetcher: solidFetch });
+        await ensureCityToursInbox({ podRoot, webId, fetcher: solidFetch });
         assertCurrentAuthContext();
         const readiness = await ensureRouteCatalogReadiness({
           podRoot,
@@ -1139,7 +1139,7 @@ export default function App({
       );
       await ensureStorage(podRoot, webId, solidFetch);
       assertCurrentAuthContext();
-      await saveSolidToursOnboarding(podRoot, record, webId, solidFetch);
+      await saveCityToursOnboarding(podRoot, record, webId, solidFetch);
       assertCurrentAuthContext();
       const stored = await loadState(podRoot, solidFetch);
       assertCurrentAuthContext();
@@ -1687,7 +1687,7 @@ export default function App({
         } catch (compensationError) {
           throw new AggregateError(
             [stateError, compensationError],
-            "Der Tourentwurf konnte nach einem Statuskonflikt nicht sicher zurückgerollt werden. Lade Solid Tours neu."
+            "Der Tourentwurf konnte nach einem Statuskonflikt nicht sicher zurückgerollt werden. Lade City Tours neu."
           );
         }
       }
@@ -1704,7 +1704,7 @@ export default function App({
         } catch (reloadError) {
           throw new AggregateError(
             [stateError, reloadError],
-            "Der Pod-Stand hat sich geändert und konnte nicht neu geladen werden. Lade Solid Tours neu."
+            "Der Pod-Stand hat sich geändert und konnte nicht neu geladen werden. Lade City Tours neu."
           );
         }
       }
@@ -1777,7 +1777,7 @@ export default function App({
             if (compensationErrors.length > 0) {
               throw new AggregateError(
                 [stateError, ...compensationErrors],
-                "Die neue Aktivität konnte nach einem Statuskonflikt nicht sicher entfernt werden. Lade Solid Tours neu."
+                "Die neue Aktivität konnte nach einem Statuskonflikt nicht sicher entfernt werden. Lade City Tours neu."
               );
             }
           }
@@ -1794,7 +1794,7 @@ export default function App({
             } catch (reloadError) {
               throw new AggregateError(
                 [stateError, reloadError],
-                "Der Pod-Stand hat sich geändert und konnte nicht neu geladen werden. Lade Solid Tours neu."
+                "Der Pod-Stand hat sich geändert und konnte nicht neu geladen werden. Lade City Tours neu."
               );
             }
           }
@@ -2298,7 +2298,7 @@ export default function App({
       const remoteSnapshot = await loadStateSnapshot(podRoot, solidFetch);
       assertCurrentAuthContext();
       if (!remoteSnapshot.etag) {
-        throw new Error("Der Pod liefert keinen starken Versionsnachweis für den Solid-Tours-Status.");
+        throw new Error("Der Pod liefert keinen starken Versionsnachweis für den City-Tours-Status.");
       }
       const requestedIds = new Set(requestedDrafts.map((item) => item.id));
       const remoteDrafts = remoteSnapshot.state.drafts.filter((item) => requestedIds.has(item.id));
@@ -2329,7 +2329,7 @@ export default function App({
 
       // Store deterministic cleanup handles privately before anything becomes
       // public. A browser/tab crash can therefore never leave a public route
-      // without an unpublish action in the next Solid Tours session.
+      // without an unpublish action in the next City Tours session.
       const planned = remoteDrafts.map((item) => {
         const snapshot = createRouteTemplateSnapshot(item);
         const datasetIdentifier = `solid-tours-route-template-${snapshot.properties.routeTemplateId}`;
@@ -2990,7 +2990,7 @@ export default function App({
           throw new AggregateError(
             [deleteError, ...rollbackErrors],
             rollbackErrors.length > 0
-              ? "Der Entwurf konnte nicht sicher gelöscht werden. Der Pod-Zustand wurde fail-closed belassen; lade Solid Tours neu."
+              ? "Der Entwurf konnte nicht sicher gelöscht werden. Der Pod-Zustand wurde fail-closed belassen; lade City Tours neu."
               : "Der Entwurf wurde nicht gelöscht und der vorherige Pod-Zustand wiederhergestellt."
           );
         }
@@ -3192,7 +3192,7 @@ export default function App({
         throw new AggregateError(
           [...causes, ...compensationErrors],
           compensationErrors.length > 0
-            ? "Löschen konnte nicht sicher zurückgerollt werden. Der Pod-Zustand wurde fail-closed belassen; lade Solid Tours neu."
+            ? "Löschen konnte nicht sicher zurückgerollt werden. Der Pod-Zustand wurde fail-closed belassen; lade City Tours neu."
             : "Die Aktivität wurde nicht gelöscht und der vorherige Pod-Zustand wiederhergestellt."
         );
       };
@@ -3215,7 +3215,7 @@ export default function App({
         if (isActivityMasterConflictError(reason)) {
           throw new AggregateError(
             [reason],
-            "Die private Aktivität wurde parallel verändert. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade Solid Tours neu."
+            "Die private Aktivität wurde parallel verändert. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade City Tours neu."
           );
         }
         // A failed network response does not prove that DELETE was not applied.
@@ -3248,7 +3248,7 @@ export default function App({
           } else {
             throw new AggregateError(
               [deleteError, verificationError, masterVerificationError].filter(Boolean),
-              "Das Ergebnis der privaten Löschung ist unklar. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade Solid Tours neu."
+              "Das Ergebnis der privaten Löschung ist unklar. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade City Tours neu."
             );
           }
         }
@@ -3263,7 +3263,7 @@ export default function App({
         } catch (masterConflict) {
           throw new AggregateError(
             [deleteError, masterConflict].filter(Boolean),
-            "Die private Aktivität wurde parallel verändert. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade Solid Tours neu."
+            "Die private Aktivität wurde parallel verändert. Der Pod-Zustand wurde fail-closed ohne Aktivitätsverweis belassen; lade City Tours neu."
           );
         }
         await compensate(
@@ -3338,8 +3338,8 @@ export default function App({
       }
       await getSession().login({
         oidcIssuer: issuer,
-        redirectUrl: `${window.location.origin}/solid-tours/`,
-        clientName: "Solid Tours",
+        redirectUrl: `${window.location.origin}/city-tours/`,
+        clientName: "City Tours",
       });
     } catch (reason) {
       window.clearTimeout(redirectWatchdog);
@@ -3357,7 +3357,7 @@ export default function App({
       setIsAuthenticated(false);
       setAuthenticatedWebId(null);
       activateLocalMode(null);
-      window.location.assign(`${window.location.origin}/solid-tours/`);
+      window.location.assign(`${window.location.origin}/city-tours/`);
     } catch (reason) {
       setFailure(reason);
       setBusy(false);
@@ -3368,8 +3368,8 @@ export default function App({
     return (
       <div
         lang={language}
-        className={`solid-tours-app solid-tours-app--loading ${
-          embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
+        className={`city-tours-app city-tours-app--loading ${
+          embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
         }`}
       >
         <main
@@ -3379,7 +3379,7 @@ export default function App({
           <span className="tours-loading-mark" aria-hidden="true">
             <FontAwesomeIcon icon="route" />
           </span>
-          <h1>Solid Tours</h1>
+          <h1>City Tours</h1>
           <p role="status" aria-live="polite">{t("loading")}</p>
           <span
             className="tours-loading-rail"
@@ -3402,7 +3402,7 @@ export default function App({
       // Keep the configured default when storage is unavailable.
     }
     return (
-      <div className="solid-tours-app solid-tours-app--login" lang={language}>
+      <div className="city-tours-app city-tours-app--login" lang={language}>
         <StandaloneLogin
           defaultIssuer={rememberedIssuer}
           busy={busy}
@@ -3418,12 +3418,12 @@ export default function App({
   if (onboardingRequired && isAuthenticated && podRoot) {
     return (
       <div
-        className={`solid-tours-app solid-tours-app--onboarding ${
-          embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
+        className={`city-tours-app city-tours-app--onboarding ${
+          embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
         }`}
         lang={language}
       >
-        <SolidToursOnboarding
+        <CityToursOnboarding
           context={embedded ? "embedded" : "standalone"}
           language={language}
           podRoot={podRoot}
@@ -3465,9 +3465,9 @@ export default function App({
   return (
     <div
       lang={language}
-      className={`solid-tours-app ${
-        embedded ? "solid-tours-app--embedded" : "solid-tours-app--standalone"
-      }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress ? " solid-tours-app--modal-open" : ""}`}
+      className={`city-tours-app ${
+        embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
+      }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress ? " city-tours-app--modal-open" : ""}`}
     >
       {!embedded && (
         <header className="app-header">
@@ -3475,7 +3475,7 @@ export default function App({
             <span className="app-brand-mark" aria-hidden="true">
               <FontAwesomeIcon icon="route" />
             </span>
-            <strong>Solid Tours</strong>
+            <strong>City Tours</strong>
           </div>
           <div className="header-actions">
             <div className="header-user" title={authenticatedWebId || undefined}>
@@ -4054,7 +4054,7 @@ export default function App({
               className="footer-logo footer-logo--tmdt"
             />
           </div>
-          <div className="footer-version">Solid Tours {appVersion}</div>
+          <div className="footer-version">City Tours {appVersion}</div>
         </footer>
       )}
     </div>

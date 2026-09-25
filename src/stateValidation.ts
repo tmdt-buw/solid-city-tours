@@ -205,13 +205,13 @@ const validateStateCollections = (podRoot: string, input: unknown): ToursState =
     !Array.isArray(state.drafts) ||
     !Array.isArray(state.activities)
   ) {
-    throw new Error("Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.");
+    throw new Error("Der City-Tours-Status hat ein ungültiges oder unbekanntes Format.");
   }
   const drafts = state.drafts.map(normalizeDraft);
   const activities = state.activities.map(normalizeActivity);
   const rawPublications = state.catalogPublications === undefined ? [] : state.catalogPublications;
   if (!Array.isArray(rawPublications)) {
-    throw new Error("Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.");
+    throw new Error("Der City-Tours-Status hat ein ungültiges oder unbekanntes Format.");
   }
   const catalogPublications = rawPublications.map((publication) =>
     normalizeCatalogPublication(podRoot, publication)
@@ -221,7 +221,7 @@ const validateStateCollections = (podRoot: string, input: unknown): ToursState =
     activities.some((activity) => activity === null) ||
     catalogPublications.some((publication) => publication === null)
   ) {
-    throw new Error("Der Solid-Tours-Status hat ein ungültiges oder unbekanntes Format.");
+    throw new Error("Der City-Tours-Status hat ein ungültiges oder unbekanntes Format.");
   }
   const publications = catalogPublications as RouteCatalogPublication[];
   const validDrafts = drafts as TourDraft[];
@@ -240,7 +240,7 @@ const validateStateCollections = (podRoot: string, input: unknown): ToursState =
       );
     })
   ) {
-    throw new Error("Der Solid-Tours-Status enthält ungültige Katalogveröffentlichungen.");
+    throw new Error("Der City-Tours-Status enthält ungültige Katalogveröffentlichungen.");
   }
   return {
     ...state,
@@ -317,12 +317,12 @@ export function validateToursState(podRoot: string, input: unknown): ToursState 
 }
 
 export function validateLocalToursState(input: unknown): ToursState {
-  const state = validateStateCollections("https://solid-tours.local.invalid/", input);
+  const state = validateStateCollections("https://city-tours.local.invalid/", input);
   if (state.activeRun !== null) {
-    throw new Error("Der gespeicherte Solid-Tours-Status darf keinen veröffentlichten Szenariolauf enthalten.");
+    throw new Error("Der gespeicherte City-Tours-Status darf keinen veröffentlichten Szenariolauf enthalten.");
   }
   if (state.catalogPublications.length > 0) {
-    throw new Error("Der lokale Solid-Tours-Status darf keine Katalogveröffentlichungen enthalten.");
+    throw new Error("Der lokale City-Tours-Status darf keine Katalogveröffentlichungen enthalten.");
   }
   return state;
 }

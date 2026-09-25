@@ -1,6 +1,6 @@
-export type SolidToursOnboardingContext = "embedded" | "standalone";
+export type CityToursOnboardingContext = "embedded" | "standalone";
 
-export type SolidToursOnboardingRecord = {
+export type CityToursOnboardingRecord = {
   schemaVersion: 2;
   app: "solid-tours";
   appSpecificAcceptedAt: string;
@@ -43,9 +43,9 @@ const normalizePublicRegistryUrl = (value: unknown): string => {
  * storage: the UI must show the current onboarding again and can replace the
  * private record only after the user explicitly accepts it.
  */
-export function parseSolidToursOnboardingRecord(
+export function parseCityToursOnboardingRecord(
   input: unknown
-): SolidToursOnboardingRecord | null {
+): CityToursOnboardingRecord | null {
   const value = input as Record<string, unknown> | null;
   if (
     !value ||
@@ -83,8 +83,8 @@ export function parseSolidToursOnboardingRecord(
 }
 
 export const onboardingCompleteFor = (
-  record: SolidToursOnboardingRecord | null,
-  context: SolidToursOnboardingContext
+  record: CityToursOnboardingRecord | null,
+  context: CityToursOnboardingContext
 ) =>
   Boolean(
     record?.appSpecificAcceptedAt &&
@@ -94,11 +94,11 @@ export const onboardingCompleteFor = (
   );
 
 export function completeOnboardingRecord(
-  current: SolidToursOnboardingRecord | null,
-  context: SolidToursOnboardingContext,
+  current: CityToursOnboardingRecord | null,
+  context: CityToursOnboardingContext,
   publicRegistryUrl: string,
   now = new Date().toISOString()
-): SolidToursOnboardingRecord {
+): CityToursOnboardingRecord {
   const registryUrl = normalizePublicRegistryUrl(publicRegistryUrl);
   if (!registryUrl) throw new Error("Die öffentliche Research-Registry ist ungültig.");
   if (!validDateTime(now)) throw new Error("Der Onboarding-Zeitpunkt ist ungültig.");

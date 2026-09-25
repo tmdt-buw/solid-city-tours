@@ -1,22 +1,22 @@
 import App from "../App";
-import type { SolidToursSession } from "../embedAuth";
+import type { CityToursSession } from "../embedAuth";
 
-export type { SolidToursSession } from "../embedAuth";
+export type { CityToursSession } from "../embedAuth";
 
-export type SolidToursEmbedProps = {
+export type CityToursEmbedProps = {
   webId?: string | null;
   /** @deprecated Pod access is available to every authenticated Solid identity. */
   demoWebId?: string | null;
   language?: string | null;
-  session?: SolidToursSession | null;
+  session?: CityToursSession | null;
 };
 
-export default function SolidToursEmbed({
+export default function CityToursEmbed({
   webId = null,
   demoWebId = null,
   language = null,
   session = null,
-}: SolidToursEmbedProps) {
+}: CityToursEmbedProps) {
   return (
     <App
       embedded

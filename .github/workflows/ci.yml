@@ -1,4 +1,4 @@
-name: Solid Tours CI and Release
+name: City Tours CI and Release
 
 on:
   push:
@@ -251,8 +251,8 @@ jobs:
           };
 
           parse(pkg.version, 'package.json version');
-          const latest = readPublishedVersion('@hoelk-f/solid-tours');
-          const exact = readPublishedVersion(`@hoelk-f/solid-tours@${pkg.version}`);
+          const latest = readPublishedVersion('@hoelk-f/city-tours');
+          const exact = readPublishedVersion(`@hoelk-f/city-tours@${pkg.version}`);
 
           console.log(`Current version: ${pkg.version}`);
           if (latest) {
@@ -302,8 +302,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            son1i/solid-tours:latest
-            son1i/solid-tours:${{ steps.package-version.outputs.package_version }}
+            son1i/city-tours:latest
+            son1i/city-tours:${{ steps.package-version.outputs.package_version }}
           secrets: |
             npm_token=${{ secrets.NPM_TOKEN }}
       - name: Wait for package and trigger manager rebuild
@@ -334,7 +334,7 @@ jobs:
           }
 
           for attempt in $(seq 1 60); do
-            if PUBLISHED_VERSION=$(lookup_exact_version "@hoelk-f/solid-tours@${PACKAGE_VERSION}"); then
+            if PUBLISHED_VERSION=$(lookup_exact_version "@hoelk-f/city-tours@${PACKAGE_VERSION}"); then
               if [ "$PUBLISHED_VERSION" != "$PACKAGE_VERSION" ]; then
                 echo "Registry returned unexpected version ${PUBLISHED_VERSION:-<empty>} for Tours ${PACKAGE_VERSION}." >&2
                 exit 1
@@ -356,7 +356,7 @@ jobs:
             sleep 10
           done
 
-          PAYLOAD=$(node -e 'process.stdout.write(JSON.stringify({event_type: "solid-tours-released", client_payload: {package: "@hoelk-f/solid-tours", version: process.env.PACKAGE_VERSION}}))')
+          PAYLOAD=$(node -e 'process.stdout.write(JSON.stringify({event_type: "city-tours-released", client_payload: {package: "@hoelk-f/city-tours", version: process.env.PACKAGE_VERSION}}))')
           curl --fail-with-body --silent --show-error -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \

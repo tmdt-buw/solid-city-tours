@@ -1,6 +1,7 @@
 import { validateLocalToursState } from "./stateValidation";
 import type { ToursState } from "./types";
 
+// Persisted key retained across the City Tours rename.
 export const LOCAL_STATE_KEY = "solid-tours:local-state:v1";
 
 export const localStateKeyForIdentity = (webId: string | null | undefined): string =>
@@ -37,7 +38,7 @@ export function loadLocalToursState(
   try {
     parsed = JSON.parse(serialized);
   } catch {
-    throw new Error("Der gespeicherte Solid-Tours-Verlauf ist beschädigt.");
+    throw new Error("Der gespeicherte City-Tours-Verlauf ist beschädigt.");
   }
   return validateLocalToursState(parsed);
 }
@@ -62,7 +63,7 @@ export function loadLocalToursStateForIdentity(
     return loadLocalToursState(storage, identityKey);
   }
 
-  // Solid Tours originally used one unscoped browser key. The first
+  // City Tours originally used one unscoped browser key. The first
   // authenticated account claims that history once; deleting the old key
   // keeps every account that signs in afterwards isolated.
   if (webId && storage.getItem(LOCAL_STATE_KEY) !== null) {

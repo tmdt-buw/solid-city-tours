@@ -1,8 +1,29 @@
-# Solid Tours
+# City Tours
 
-Solid Tours is the Komoot-like application for the Solid Dataspace stack. It lets Solid users draw
+City Tours is the Komoot-like application for the Solid Dataspace stack. It lets Solid users draw
 activity-neutral tours, import GPX/GeoJSON, record completed activities without GPS tracking, and
 explicitly publish one restricted GeoJSON scenario bundle per Pod at a time.
+
+## City Tours rename
+
+The application, embed package (`@hoelk-f/city-tours`), Docker image
+(`son1i/city-tours`) and public routes (`/city-tours/`, `/web/city-tours`)
+use the City Tours name. Existing application links redirect to the new routes.
+The checkout directory and GitHub/GitLab repository names remain `solid-tours`
+until the separate repository rename; local Compose mounts and release scripts
+still point to that checkout.
+
+Persisted Pod paths, browser/session keys, onboarding records, catalog identifiers,
+RDF vocabulary IRIs and GeoJSON source/derivation identifiers intentionally retain
+their existing `solid-tours` values. This is a branding/package migration, not a
+data migration: existing tours, publications, consent records and access rules
+remain usable by City Tours and the environmental worker.
+
+Publish the City Tours package and Docker image before deploying the updated
+Manager and stack. The City Tours CI publishes them under their new names and
+dispatches `city-tours-released`; Manager CI waits for the exact package version.
+For local development, use the Compose local-package mode to build and link the
+renamed embed package directly from the existing checkout.
 
 ## Development
 
@@ -13,10 +34,10 @@ npm run build
 npm start
 ```
 
-The standalone application is served below `/solid-tours/` and starts with its own Solid provider
-login. After authentication it renders a map-first workspace with a Solid Tours header and footer.
+The standalone application is served below `/city-tours/` and starts with its own Solid provider
+login. After authentication it renders a map-first workspace with a City Tours header and footer.
 The package also exports
-`@hoelk-f/solid-tours/embed` and `@hoelk-f/solid-tours/embed.css` for integration in the Dataspace
+`@hoelk-f/city-tours/embed` and `@hoelk-f/city-tours/embed.css` for integration in the Dataspace
 Manager. The embed reuses the host's authenticated Solid session and intentionally omits its own
 login, header and footer so the Manager remains responsible for the surrounding application chrome.
 
@@ -58,7 +79,7 @@ Publication rollback removes the marker and Catalog reference before deleting pr
 If either discovery cleanup fails, the private snapshot and an `activeRun` recovery record are kept
 so the idempotent Reset action can retry instead of leaving an untracked Catalog orphan.
 
-Routes are created by drawing freely or importing GPX/GeoJSON. Solid Tours does not contact a
+Routes are created by drawing freely or importing GPX/GeoJSON. City Tours does not contact a
 routing service. Once a route is marked as completed, its duration is derived using the demo speed
 of 4.5 km/h for walking or 15 km/h for cycling. A suitable elapsed time from a GPX track is retained.
 Historical completed activities retain their original `osrm` duration provenance without enabling
@@ -66,7 +87,7 @@ or invoking a routing service for new routes.
 
 Three real Wuppertal GeoJSON tracks for testing the importer are available in
 `public/example-routes/`. In a running standalone stack they can be downloaded below
-`/solid-tours/example-routes/`. They are derived from versioned OpenStreetMap route relations;
+`/city-tours/example-routes/`. They are derived from versioned OpenStreetMap route relations;
 their source, `© OpenStreetMap contributors` attribution and ODbL 1.0 license are documented in
 that directory and embedded in every file.
 
@@ -78,5 +99,5 @@ registry-based lockfile.
 The CI workflow verifies tests and builds for pushes and pull requests. A push to `main` additionally
 publishes the generated `dist` package to GitHub Packages, pushes the versioned and `latest` Docker
 images, and dispatches a Dataspace Manager rebuild. Publishing `dist` is intentional: its generated
-manifest keeps React and ReactDOM as peer dependencies so an embedded Solid Tours instance reuses
+manifest keeps React and ReactDOM as peer dependencies so an embedded City Tours instance reuses
 the Manager's single React runtime.

@@ -1,13 +1,13 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import SolidToursOnboarding from "./SolidToursOnboarding";
+import CityToursOnboarding from "./CityToursOnboarding";
 import type { ToursLanguage } from "./i18n";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-describe("SolidToursOnboarding public metadata disclosure", () => {
+describe("CityToursOnboarding public metadata disclosure", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -33,7 +33,7 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     const onComplete = vi.fn();
     act(() => {
       root.render(
-        createElement(SolidToursOnboarding, {
+        createElement(CityToursOnboarding, {
           context,
           language,
           podRoot: "https://pod.example/alice/",
@@ -110,7 +110,7 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     expect(container.textContent).not.toContain("Public research registry");
     expect(container.textContent).not.toContain("Independent app setup");
     expect(container.textContent).not.toContain("Public Catalog identity");
-    expect(container.querySelector('input[name="solid-tours-publisher"]')).toBeNull();
+    expect(container.querySelector('input[name="city-tours-publisher"]')).toBeNull();
     expect(container.querySelector('input[type="radio"]')).toBeNull();
 
     const submit = container.querySelector<HTMLButtonElement>("button.primary")!;
@@ -134,8 +134,8 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     expect(container.textContent).toContain("register your WebID there");
     expect(container.textContent).toContain("You do not need to complete the Dataspace Manager onboarding first");
     expect(container.textContent).toContain("Public Catalog identity");
-    expect(container.querySelector<HTMLInputElement>('input[name="solid-tours-publisher"]')?.value).toBe("Hannah Mueller");
-    expect(container.querySelector<HTMLInputElement>('input[name="solid-tours-contact-email"]')?.value).toBe("hannah@example.org");
+    expect(container.querySelector<HTMLInputElement>('input[name="city-tours-publisher"]')?.value).toBe("Hannah Mueller");
+    expect(container.querySelector<HTMLInputElement>('input[name="city-tours-contact-email"]')?.value).toBe("hannah@example.org");
 
     const submit = container.querySelector<HTMLButtonElement>("button.primary")!;
     expect(submit.disabled).toBe(true);
@@ -177,8 +177,8 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
     });
     expect(submit.disabled).toBe(true);
     act(() => {
-      const name = container.querySelector<HTMLInputElement>('input[name="solid-tours-publisher"]')!;
-      const email = container.querySelector<HTMLInputElement>('input[name="solid-tours-contact-email"]')!;
+      const name = container.querySelector<HTMLInputElement>('input[name="city-tours-publisher"]')!;
+      const email = container.querySelector<HTMLInputElement>('input[name="city-tours-contact-email"]')!;
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
       setter.call(name, "Alice Example");
       name.dispatchEvent(new Event("input", { bubbles: true }));
@@ -196,7 +196,7 @@ describe("SolidToursOnboarding public metadata disclosure", () => {
   it("blocks embedded consent with missing metadata without exposing profile inputs", () => {
     renderOnboarding("en", "embedded", true, false, "", "");
     expect(container.textContent).toContain("Complete your publisher name and contact email in Profile Manager");
-    expect(container.querySelector('input[name="solid-tours-publisher"]')).toBeNull();
+    expect(container.querySelector('input[name="city-tours-publisher"]')).toBeNull();
     expect(container.querySelector<HTMLButtonElement>("button.primary")!.disabled).toBe(true);
   });
 });

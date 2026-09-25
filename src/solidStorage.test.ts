@@ -470,7 +470,7 @@ describe("private Pod layout", () => {
     ).rejects.toThrow(/zwischenzeitlich geändert/);
     await expect(
       saveState(podRoot, staleTarget, base, ownerWebId, fetcher)
-    ).rejects.toThrow(/lokale Solid-Tours-Stand ist veraltet/);
+    ).rejects.toThrow(/lokale City-Tours-Stand ist veraltet/);
 
     const puts = fetcher.mock.calls.filter(([, init]) => init?.method === "PUT");
     expect(puts).toHaveLength(1);
@@ -514,7 +514,7 @@ describe("private Pod layout", () => {
     ).resolves.toBeUndefined();
     await expect(
       saveState(podRoot, secondTarget, base, ownerWebId, fetcher)
-    ).rejects.toThrow(/lokale Solid-Tours-Stand ist veraltet/);
+    ).rejects.toThrow(/lokale City-Tours-Stand ist veraltet/);
 
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
   });

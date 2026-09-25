@@ -26,8 +26,8 @@ vi.mock("@inrupt/solid-client", async (importOriginal) => {
 });
 
 import {
-  ensureSolidToursInbox,
-  getSolidToursInboxReadiness,
+  ensureCityToursInbox,
+  getCityToursInboxReadiness,
 } from "./accessRequests";
 
 const POD_ROOT = "https://pod.example/alice/";
@@ -37,7 +37,7 @@ const INBOX_URL = `${POD_ROOT}inbox/`;
 
 const notFound = () => Object.assign(new Error("not found"), { statusCode: 404 });
 
-describe("Solid Tours app-specific Inbox setup", () => {
+describe("City Tours app-specific Inbox setup", () => {
   beforeEach(() => {
     Object.values(solidClientMocks).forEach((mock) => mock.mockReset());
     solidClientMocks.hasResourceAcl.mockReturnValue(true);
@@ -79,7 +79,7 @@ describe("Solid Tours app-specific Inbox setup", () => {
     solidClientMocks.getUrl.mockReturnValueOnce(INBOX_URL);
 
     await expect(
-      ensureSolidToursInbox({
+      ensureCityToursInbox({
         podRoot: POD_ROOT,
         webId: WEB_ID,
         fetcher: vi.fn<typeof fetch>(),
@@ -122,7 +122,7 @@ describe("Solid Tours app-specific Inbox setup", () => {
     solidClientMocks.getUrl.mockReturnValue(INBOX_URL);
 
     await expect(
-      getSolidToursInboxReadiness({
+      getCityToursInboxReadiness({
         podRoot: POD_ROOT,
         webId: WEB_ID,
         fetcher: vi.fn<typeof fetch>(),
@@ -140,7 +140,7 @@ describe("Solid Tours app-specific Inbox setup", () => {
     solidClientMocks.getUrl.mockReturnValue(`${POD_ROOT}other-inbox/`);
 
     await expect(
-      getSolidToursInboxReadiness({
+      getCityToursInboxReadiness({
         podRoot: POD_ROOT,
         webId: WEB_ID,
         fetcher: vi.fn<typeof fetch>(),
@@ -156,7 +156,7 @@ describe("Solid Tours app-specific Inbox setup", () => {
       control: false,
     });
     await expect(
-      getSolidToursInboxReadiness({
+      getCityToursInboxReadiness({
         podRoot: POD_ROOT,
         webId: WEB_ID,
         fetcher: vi.fn<typeof fetch>(),
@@ -176,7 +176,7 @@ describe("Solid Tours app-specific Inbox setup", () => {
     });
 
     await expect(
-      ensureSolidToursInbox({
+      ensureCityToursInbox({
         podRoot: POD_ROOT,
         webId: WEB_ID,
         fetcher: vi.fn<typeof fetch>(),

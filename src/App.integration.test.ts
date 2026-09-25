@@ -129,7 +129,7 @@ const podNetworkMocks = vi.hoisted(() => ({
   loadDraftMasterSnapshot: vi.fn(),
   loadDraftMasterResourceSnapshot: vi.fn(),
   loadPublicRouteTemplateResourceSnapshot: vi.fn(),
-  loadSolidToursOnboarding: vi.fn(),
+  loadCityToursOnboarding: vi.fn(),
   loadStateSnapshot: vi.fn(),
   clearPublishedMarker: vi.fn(),
   deleteActivity: vi.fn(),
@@ -144,7 +144,7 @@ const podNetworkMocks = vi.hoisted(() => ({
   savePublicRouteTemplate: vi.fn(),
   updatePublicRouteTemplateConditionally: vi.fn(),
   saveRunSnapshot: vi.fn(),
-  saveSolidToursOnboarding: vi.fn(),
+  saveCityToursOnboarding: vi.fn(),
   saveState: vi.fn(),
   saveStateIfUnchanged: vi.fn(),
   writePublishedMarker: vi.fn(),
@@ -164,7 +164,7 @@ vi.mock("./solidStorage", async () => {
     loadDraftMasterResourceSnapshot: podNetworkMocks.loadDraftMasterResourceSnapshot,
     loadPublicRouteTemplateResourceSnapshot:
       podNetworkMocks.loadPublicRouteTemplateResourceSnapshot,
-    loadSolidToursOnboarding: podNetworkMocks.loadSolidToursOnboarding,
+    loadCityToursOnboarding: podNetworkMocks.loadCityToursOnboarding,
     loadStateSnapshot: podNetworkMocks.loadStateSnapshot,
     clearPublishedMarker: podNetworkMocks.clearPublishedMarker,
     deleteActivity: podNetworkMocks.deleteActivity,
@@ -180,7 +180,7 @@ vi.mock("./solidStorage", async () => {
     updatePublicRouteTemplateConditionally:
       podNetworkMocks.updatePublicRouteTemplateConditionally,
     saveRunSnapshot: podNetworkMocks.saveRunSnapshot,
-    saveSolidToursOnboarding: podNetworkMocks.saveSolidToursOnboarding,
+    saveCityToursOnboarding: podNetworkMocks.saveCityToursOnboarding,
     saveState: podNetworkMocks.saveState,
     saveStateIfUnchanged: podNetworkMocks.saveStateIfUnchanged,
     writePublishedMarker: podNetworkMocks.writePublishedMarker,
@@ -210,8 +210,8 @@ const catalogMocks = vi.hoisted(() => ({
 }));
 
 const accessRequestMocks = vi.hoisted(() => ({
-  ensureSolidToursInbox: vi.fn(),
-  getSolidToursInboxReadiness: vi.fn(),
+  ensureCityToursInbox: vi.fn(),
+  getCityToursInboxReadiness: vi.fn(),
   resolveSolidInbox: vi.fn(),
   revokeAndArchiveScenarioAccess: vi.fn(),
 }));
@@ -221,12 +221,12 @@ vi.mock("./accessRequests", () => accessRequestMocks);
 vi.mock("./catalog", () => catalogMocks);
 
 import App from "./App";
-import RawSolidToursEmbed, {
-  type SolidToursEmbedProps,
-} from "./embed/SolidToursEmbed";
+import RawCityToursEmbed, {
+  type CityToursEmbedProps,
+} from "./embed/CityToursEmbed";
 import { localStateKeyForIdentity } from "./localStorage";
 import { StateConflictError } from "./solidStorage";
-import type { SolidToursSession } from "./embedAuth";
+import type { CityToursSession } from "./embedAuth";
 import type { ActiveRun, RouteCatalogPublication, TourDraft } from "./types";
 import { TOURS_LANGUAGE_EVENT, TOURS_LANGUAGE_STORAGE_KEY } from "./i18n";
 import {
@@ -238,8 +238,8 @@ import { validateLocalToursState } from "./stateValidation";
 // The pre-existing integration suite asserts the German product copy. Keep
 // those behavioral tests explicit while dedicated language-contract tests
 // below exercise the new English default and controlled embed switching.
-const SolidToursEmbed = (props: SolidToursEmbedProps) =>
-  createElement(RawSolidToursEmbed, { language: "de", ...props });
+const CityToursEmbed = (props: CityToursEmbedProps) =>
+  createElement(RawCityToursEmbed, { language: "de", ...props });
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -337,7 +337,7 @@ async function confirmDeleteDialog(container: HTMLElement): Promise<void> {
   });
 }
 
-async function acceptSolidToursOnboarding(container: HTMLElement): Promise<void> {
+async function acceptCityToursOnboarding(container: HTMLElement): Promise<void> {
   await waitForDom(() => {
     expect(container.querySelector(".tours-onboarding")).not.toBeNull();
   });
@@ -357,14 +357,14 @@ async function acceptSolidToursOnboarding(container: HTMLElement): Promise<void>
   await act(async () => submit.click());
 }
 
-describe("Solid Tours app shells", () => {
+describe("City Tours app shells", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-    delete window.__SOLID_TOURS_CONFIG__;
+    delete window.__CITY_TOURS_CONFIG__;
     sessionMocks.session.info.webId = null;
     sessionMocks.fetch.mockReset();
     sessionMocks.login.mockReset();
@@ -378,7 +378,7 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.loadDraftMasterSnapshot.mockReset();
     podNetworkMocks.loadDraftMasterResourceSnapshot.mockReset();
     podNetworkMocks.loadPublicRouteTemplateResourceSnapshot.mockReset();
-    podNetworkMocks.loadSolidToursOnboarding.mockReset();
+    podNetworkMocks.loadCityToursOnboarding.mockReset();
     podNetworkMocks.loadStateSnapshot.mockReset();
     podNetworkMocks.activityMasterExists.mockReset();
     podNetworkMocks.clearPublishedMarker.mockReset();
@@ -394,13 +394,13 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.savePublicRouteTemplate.mockReset();
     podNetworkMocks.updatePublicRouteTemplateConditionally.mockReset();
     podNetworkMocks.saveRunSnapshot.mockReset();
-    podNetworkMocks.saveSolidToursOnboarding.mockReset();
+    podNetworkMocks.saveCityToursOnboarding.mockReset();
     podNetworkMocks.saveState.mockReset();
     podNetworkMocks.saveStateIfUnchanged.mockReset();
     podNetworkMocks.writePublishedMarker.mockReset();
     podNetworkMocks.resolvePodRoot.mockResolvedValue("https://pods.example/alex/");
     podNetworkMocks.ensureStorage.mockResolvedValue(undefined);
-    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue({
+    podNetworkMocks.loadCityToursOnboarding.mockResolvedValue({
       schemaVersion: 2,
       app: "solid-tours",
       appSpecificAcceptedAt: "2026-08-20T12:00:00.000Z",
@@ -457,12 +457,12 @@ describe("Solid Tours app shells", () => {
     catalogMocks.removeCatalogEntry.mockReset();
     accessRequestMocks.revokeAndArchiveScenarioAccess.mockReset();
     accessRequestMocks.revokeAndArchiveScenarioAccess.mockResolvedValue(0);
-    accessRequestMocks.ensureSolidToursInbox.mockReset();
-    accessRequestMocks.ensureSolidToursInbox.mockResolvedValue(
+    accessRequestMocks.ensureCityToursInbox.mockReset();
+    accessRequestMocks.ensureCityToursInbox.mockResolvedValue(
       "https://pods.example/alex/inbox/"
     );
-    accessRequestMocks.getSolidToursInboxReadiness.mockReset();
-    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+    accessRequestMocks.getCityToursInboxReadiness.mockReset();
+    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({
       configured: true,
       inboxUrl: "https://pods.example/alex/inbox/",
     });
@@ -493,7 +493,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -509,7 +509,7 @@ describe("Solid Tours app shells", () => {
     });
 
     const status = container.querySelector<HTMLElement>(".tours-loading");
-    expect(status?.textContent).toContain("Solid Tours");
+    expect(status?.textContent).toContain("City Tours");
     expect(status?.textContent).toContain("Dein persönlicher Tourenbereich wird geladen …");
     expect(status?.tagName).toBe("MAIN");
     expect(status?.getAttribute("aria-busy")).toBe("true");
@@ -532,7 +532,7 @@ describe("Solid Tours app shells", () => {
     act(() => root.render(createElement(App)));
 
     await waitForDom(() => {
-      expect(container.querySelector(".solid-tours-login")).not.toBeNull();
+      expect(container.querySelector(".city-tours-login")).not.toBeNull();
     });
 
     expect(container.querySelector(".route-workspace")).toBeNull();
@@ -548,11 +548,11 @@ describe("Solid Tours app shells", () => {
     act(() => root.render(createElement(App)));
 
     await waitForDom(() => {
-      expect(container.querySelector(".solid-tours-login")).not.toBeNull();
+      expect(container.querySelector(".city-tours-login")).not.toBeNull();
     });
 
     expect(container.textContent).toContain("Suggested providers");
-    expect(container.querySelector(".solid-tours-app")?.getAttribute("lang")).toBe("en");
+    expect(container.querySelector(".city-tours-app")?.getAttribute("lang")).toBe("en");
     const languageSelect = container.querySelector<HTMLSelectElement>(
       ".language-toggle__select"
     )!;
@@ -562,7 +562,7 @@ describe("Solid Tours app shells", () => {
     });
 
     expect(container.textContent).toContain("Vorgeschlagene Anbieter");
-    expect(container.querySelector(".solid-tours-app")?.getAttribute("lang")).toBe("de");
+    expect(container.querySelector(".city-tours-app")?.getAttribute("lang")).toBe("de");
     expect(window.localStorage.getItem(TOURS_LANGUAGE_STORAGE_KEY)).toBe("de");
 
     act(() => {
@@ -577,12 +577,12 @@ describe("Solid Tours app shells", () => {
   });
 
   it("repairs standalone Inbox and public Catalog setup without requiring Manager onboarding", async () => {
-    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue(null);
+    podNetworkMocks.loadCityToursOnboarding.mockResolvedValue(null);
     catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
       catalogConfigured: false,
       publicRegistries: [],
     });
-    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({
       configured: false,
       inboxUrl: "https://pods.example/alex/inbox/",
     });
@@ -596,10 +596,10 @@ describe("Solid Tours app shells", () => {
     expect(container.textContent).toContain("You do not need to complete the Dataspace Manager onboarding first");
     expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
 
-    await acceptSolidToursOnboarding(container);
+    await acceptCityToursOnboarding(container);
     await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
 
-    expect(accessRequestMocks.ensureSolidToursInbox).toHaveBeenCalledWith({
+    expect(accessRequestMocks.ensureCityToursInbox).toHaveBeenCalledWith({
       podRoot: "https://pods.example/alex/",
       webId: NON_HANNAH_WEB_ID,
       fetcher: expect.any(Function),
@@ -610,14 +610,14 @@ describe("Solid Tours app shells", () => {
       contactEmail: "alex@example.org",
       fetcher: expect.any(Function),
     });
-    expect(catalogMocks.saveCatalogProfileMetadata.mock.invocationCallOrder[0]).toBeLessThan(accessRequestMocks.ensureSolidToursInbox.mock.invocationCallOrder[0]);
+    expect(catalogMocks.saveCatalogProfileMetadata.mock.invocationCallOrder[0]).toBeLessThan(accessRequestMocks.ensureCityToursInbox.mock.invocationCallOrder[0]);
     expect(catalogMocks.ensureRouteCatalogReadiness).toHaveBeenCalledWith({
       podRoot: "https://pods.example/alex/",
       webId: NON_HANNAH_WEB_ID,
       registryUrl: "https://registry.example/research",
       fetcher: expect.any(Function),
     });
-    expect(podNetworkMocks.saveSolidToursOnboarding).toHaveBeenCalledWith(
+    expect(podNetworkMocks.saveCityToursOnboarding).toHaveBeenCalledWith(
       "https://pods.example/alex/",
       expect.objectContaining({
         schemaVersion: 2,
@@ -628,7 +628,7 @@ describe("Solid Tours app shells", () => {
       expect.any(Function)
     );
     expect(
-      accessRequestMocks.ensureSolidToursInbox.mock.invocationCallOrder[0]
+      accessRequestMocks.ensureCityToursInbox.mock.invocationCallOrder[0]
     ).toBeLessThan(catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]);
     expect(
       catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]
@@ -637,14 +637,14 @@ describe("Solid Tours app shells", () => {
   });
 
   it("revalidates a saved record and blocks embed setup when the Inbox was revoked", async () => {
-    accessRequestMocks.getSolidToursInboxReadiness.mockResolvedValue({
+    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({
       configured: false,
       inboxUrl: "https://pods.example/alex/inbox/",
     });
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -668,7 +668,7 @@ describe("Solid Tours app shells", () => {
     expect(
       container.querySelector<HTMLButtonElement>(".tours-onboarding button.primary")?.disabled
     ).toBe(true);
-    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
     expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
     expect(container.querySelector(".route-workspace")).toBeNull();
   });
@@ -681,7 +681,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -695,17 +695,17 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
       "allgemeine Dataspace-Onboarding"
     );
-    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
     expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
     expect(container.querySelector(".route-workspace")).toBeNull();
   });
 
   it("accepts only app-specific consent in embed mode when Dataspace readiness exists", async () => {
-    podNetworkMocks.loadSolidToursOnboarding.mockResolvedValue(null);
+    podNetworkMocks.loadCityToursOnboarding.mockResolvedValue(null);
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -719,14 +719,14 @@ describe("Solid Tours app shells", () => {
     expect(container.textContent).not.toContain("Öffentliche Forschungs-Registry");
     expect(container.querySelector('input[type="radio"]')).toBeNull();
 
-    await acceptSolidToursOnboarding(container);
+    await acceptCityToursOnboarding(container);
     await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
 
-    expect(accessRequestMocks.ensureSolidToursInbox).not.toHaveBeenCalled();
+    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
     expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
     expect(catalogMocks.loadRouteCatalogReadiness).toHaveBeenCalledTimes(2);
-    expect(accessRequestMocks.getSolidToursInboxReadiness).toHaveBeenCalledTimes(2);
-    expect(podNetworkMocks.saveSolidToursOnboarding).toHaveBeenCalledWith(
+    expect(accessRequestMocks.getCityToursInboxReadiness).toHaveBeenCalledTimes(2);
+    expect(podNetworkMocks.saveCityToursOnboarding).toHaveBeenCalledWith(
       "https://pods.example/alex/",
       expect.objectContaining({
         schemaVersion: 2,
@@ -744,7 +744,7 @@ describe("Solid Tours app shells", () => {
       expect(container.querySelector(".route-workspace")).not.toBeNull();
     });
 
-    expect(container.querySelector(".solid-tours-login")).toBeNull();
+    expect(container.querySelector(".city-tours-login")).toBeNull();
     expect(container.querySelector(".app-header")).not.toBeNull();
     expect(container.querySelector(".app-footer")).not.toBeNull();
     expect(container.querySelector(".scenario-card")).toBeNull();
@@ -790,14 +790,14 @@ describe("Solid Tours app shells", () => {
 
     expect(container.textContent).toContain("Tour planner");
     expect(container.querySelector(".app-header .language-toggle")).not.toBeNull();
-    expect(container.querySelector(".solid-tours-login .language-toggle")).toBeNull();
+    expect(container.querySelector(".city-tours-login .language-toggle")).toBeNull();
     const actions = container.querySelector(".app-header .header-actions")!;
     expect(actions.children[0]?.classList.contains("header-user")).toBe(true);
     expect(actions.children[1]?.classList.contains("language-toggle")).toBe(true);
     expect(actions.children[2]?.classList.contains("header-logout")).toBe(true);
     expect(actions.textContent).toContain(NON_HANNAH_WEB_ID);
     expect(container.querySelector(".app-footer .footer-version")?.textContent).toContain(
-      "Solid Tours"
+      "City Tours"
     );
   });
 
@@ -821,22 +821,22 @@ describe("Solid Tours app shells", () => {
     try {
       act(() => root.render(createElement(App)));
       await waitForDom(() => {
-        expect(container.querySelector(".solid-tours-login")).not.toBeNull();
+        expect(container.querySelector(".city-tours-login")).not.toBeNull();
       });
 
       vi.useFakeTimers();
       await act(async () => {
-        container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")!.click();
+        container.querySelector<HTMLButtonElement>(".city-tours-login__submit")!.click();
         await Promise.resolve();
       });
 
       expect(bridgeLogin).toHaveBeenCalledWith("https://solid-community-server.tmdt.info");
-      expect(container.querySelector<HTMLButtonElement>(".solid-tours-login__submit")?.disabled).toBe(
+      expect(container.querySelector<HTMLButtonElement>(".city-tours-login__submit")?.disabled).toBe(
         false
       );
 
       act(() => vi.advanceTimersByTime(20_000));
-      expect(container.querySelector(".solid-tours-login__error")).toBeNull();
+      expect(container.querySelector(".city-tours-login__error")).toBeNull();
     } finally {
       vi.useRealTimers();
       Object.defineProperty(window, "parent", {
@@ -851,7 +851,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -863,8 +863,8 @@ describe("Solid Tours app shells", () => {
       expect(container.textContent).toContain("Wuppertaler Runde");
     });
 
-    expect(container.querySelector(".solid-tours-app--embedded")).not.toBeNull();
-    expect(container.querySelector(".solid-tours-login")).toBeNull();
+    expect(container.querySelector(".city-tours-app--embedded")).not.toBeNull();
+    expect(container.querySelector(".city-tours-login")).toBeNull();
     expect(container.querySelector(".app-header")).toBeNull();
     expect(container.querySelector(".app-footer")).toBeNull();
     expect(container.querySelector(".scenario-card")).toBeNull();
@@ -925,7 +925,7 @@ describe("Solid Tours app shells", () => {
     act(() => completeButton!.click());
     expect(container.querySelector(".modal-backdrop")).not.toBeNull();
     expect(container.querySelector(".confirm-dialog")).not.toBeNull();
-    expect(container.querySelector(".solid-tours-app--modal-open")).not.toBeNull();
+    expect(container.querySelector(".city-tours-app--modal-open")).not.toBeNull();
     expect(container.querySelector(".confirm-dialog")?.textContent).toContain("19.08.2026");
     const dialogSave = container.querySelector<HTMLButtonElement>(".confirm-dialog .primary")!;
     expect(dialogSave.textContent).toBe("Speichern");
@@ -968,7 +968,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1028,7 +1028,7 @@ describe("Solid Tours app shells", () => {
 
       act(() =>
         root.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: NON_HANNAH_WEB_ID,
             session: {
               info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1138,7 +1138,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1306,7 +1306,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1377,7 +1377,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1432,7 +1432,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1486,7 +1486,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1542,7 +1542,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1598,7 +1598,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1655,7 +1655,7 @@ describe("Solid Tours app shells", () => {
 
       act(() =>
         root.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: NON_HANNAH_WEB_ID,
             session: {
               info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1707,7 +1707,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1761,7 +1761,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -1793,7 +1793,7 @@ describe("Solid Tours app shells", () => {
     };
 
     act(() =>
-      root.render(createElement(RawSolidToursEmbed, { ...props, language: "en" }))
+      root.render(createElement(RawCityToursEmbed, { ...props, language: "en" }))
     );
     await waitForDom(() => expect(container.textContent).toContain("Tour planner"));
 
@@ -1837,7 +1837,7 @@ describe("Solid Tours app shells", () => {
     expect(container.querySelector(".confirm-dialog .language-toggle")).toBeNull();
 
     act(() =>
-      root.render(createElement(RawSolidToursEmbed, { ...props, language: "de" }))
+      root.render(createElement(RawCityToursEmbed, { ...props, language: "de" }))
     );
 
     expect(container.textContent).toContain("Tourenplaner");
@@ -1867,7 +1867,7 @@ describe("Solid Tours app shells", () => {
     );
     act(() =>
       root.render(
-        createElement(RawSolidToursEmbed, {
+        createElement(RawCityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           language: "en",
@@ -1900,7 +1900,7 @@ describe("Solid Tours app shells", () => {
   it("does not translate a user-entered name that equals a generated default", async () => {
     act(() =>
       root.render(
-        createElement(RawSolidToursEmbed, {
+        createElement(RawCityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           language: "en",
@@ -1923,7 +1923,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(RawSolidToursEmbed, {
+        createElement(RawCityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           language: "de",
@@ -1938,7 +1938,7 @@ describe("Solid Tours app shells", () => {
   it("shows map editing actions only while the current route contains points", async () => {
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -1988,7 +1988,7 @@ describe("Solid Tours app shells", () => {
       JSON.stringify(twoRouteState)
     );
 
-    act(() => root.render(createElement(SolidToursEmbed, {})));
+    act(() => root.render(createElement(CityToursEmbed, {})));
     await waitForDom(() => expect(container.querySelectorAll(".draft-item")).toHaveLength(2));
 
     expect(leafletMocks.circleMarkerFactory).not.toHaveBeenCalled();
@@ -2070,7 +2070,7 @@ describe("Solid Tours app shells", () => {
       localStateKeyForIdentity(null),
       JSON.stringify(localStateWithActivity)
     );
-    act(() => root.render(createElement(SolidToursEmbed, {})));
+    act(() => root.render(createElement(CityToursEmbed, {})));
     await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
 
     act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
@@ -2126,7 +2126,7 @@ describe("Solid Tours app shells", () => {
       localStateKeyForIdentity(null),
       JSON.stringify(localStateWithActivity)
     );
-    act(() => root.render(createElement(SolidToursEmbed, {})));
+    act(() => root.render(createElement(CityToursEmbed, {})));
     await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
 
     act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
@@ -2177,7 +2177,7 @@ describe("Solid Tours app shells", () => {
     ]);
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -2236,7 +2236,7 @@ describe("Solid Tours app shells", () => {
     catalogMocks.discoverCatalogedRoutes.mockResolvedValue([catalogRoute]);
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -2310,7 +2310,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -2366,7 +2366,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -2424,7 +2424,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           session: {
             info: { isLoggedIn: true, webId: NON_HANNAH_WEB_ID },
@@ -2464,7 +2464,7 @@ describe("Solid Tours app shells", () => {
     try {
       act(() =>
         root.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: NON_HANNAH_WEB_ID,
             demoWebId: HANNAH_WEB_ID,
           })
@@ -2500,7 +2500,7 @@ describe("Solid Tours app shells", () => {
     );
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -2535,7 +2535,7 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -2572,7 +2572,7 @@ describe("Solid Tours app shells", () => {
     podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -2640,7 +2640,7 @@ describe("Solid Tours app shells", () => {
       podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
       podNetworkMocks.saveState.mockResolvedValue(undefined);
       podNetworkMocks.saveActivityConditionally.mockReturnValue(pendingActivity);
-      const session: SolidToursSession = {
+      const session: CityToursSession = {
         info: { isLoggedIn: true, webId: HANNAH_WEB_ID },
         fetch: managerFetch,
       };
@@ -2648,7 +2648,7 @@ describe("Solid Tours app shells", () => {
       act(() => {
         root.render(
           mode === "embed"
-            ? createElement(SolidToursEmbed, {
+            ? createElement(CityToursEmbed, {
                 webId: HANNAH_WEB_ID,
                 demoWebId: HANNAH_WEB_ID,
                 session,
@@ -2690,8 +2690,8 @@ describe("Solid Tours app shells", () => {
         false
       );
       expect(container.querySelector(".confirm-dialog")).toBeNull();
-      expect(container.querySelector(".solid-tours-app--modal-open")).not.toBeNull();
-      expect(container.querySelector(`.solid-tours-app--${mode === "embed" ? "embedded" : "standalone"}`)).not.toBeNull();
+      expect(container.querySelector(".city-tours-app--modal-open")).not.toBeNull();
+      expect(container.querySelector(`.city-tours-app--${mode === "embed" ? "embedded" : "standalone"}`)).not.toBeNull();
 
       await act(async () => {
         resolveActivity({ etag: '"activity-new"' });
@@ -2700,7 +2700,7 @@ describe("Solid Tours app shells", () => {
         expect(container.querySelector('[data-testid="completion-loading-overlay"]')).toBeNull();
         expect(container.querySelectorAll(".activity-item")).toHaveLength(2);
       });
-      expect(container.querySelector(".solid-tours-app--modal-open")).toBeNull();
+      expect(container.querySelector(".city-tours-app--modal-open")).toBeNull();
     }
   );
 
@@ -2719,7 +2719,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -2762,7 +2762,7 @@ describe("Solid Tours app shells", () => {
     );
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: null,
         })
       )
@@ -2817,7 +2817,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -2884,12 +2884,12 @@ describe("Solid Tours app shells", () => {
       etag: '"state-v2"',
     });
     podNetworkMocks.saveState.mockRejectedValue(
-      new StateConflictError("Der Solid-Tours-Status wurde zwischenzeitlich geändert.")
+      new StateConflictError("Der City-Tours-Status wurde zwischenzeitlich geändert.")
     );
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -2938,12 +2938,12 @@ describe("Solid Tours app shells", () => {
       .mockResolvedValueOnce({ etag: '"draft-v2"' })
       .mockResolvedValueOnce({ etag: '"draft-v3"' });
     podNetworkMocks.saveState.mockRejectedValue(
-      new StateConflictError("Der Solid-Tours-Status wurde zwischenzeitlich geändert.")
+      new StateConflictError("Der City-Tours-Status wurde zwischenzeitlich geändert.")
     );
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -2997,7 +2997,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3014,7 +3014,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3057,7 +3057,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3130,7 +3130,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3185,7 +3185,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3271,7 +3271,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3389,7 +3389,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3508,7 +3508,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3555,7 +3555,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3612,7 +3612,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3635,7 +3635,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -3669,7 +3669,7 @@ describe("Solid Tours app shells", () => {
   it("shows action errors as a dismissible map overlay without reserving planner space", async () => {
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
         })
@@ -3700,7 +3700,7 @@ describe("Solid Tours app shells", () => {
   it("keeps the deprecated demo-WebID prop compatible without gating Pod access", async () => {
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: "not-a-webid",
         })
@@ -3734,7 +3734,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: managerSession,
@@ -3768,7 +3768,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: managerSession,
@@ -3792,14 +3792,14 @@ describe("Solid Tours app shells", () => {
     });
     podNetworkMocks.ensureStorage.mockResolvedValue(undefined);
     podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
-    const managerSession: SolidToursSession = {
+    const managerSession: CityToursSession = {
       info: { isLoggedIn: true, webId: HANNAH_WEB_ID },
       fetch: hannahFetch,
     };
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: managerSession,
@@ -3812,7 +3812,7 @@ describe("Solid Tours app shells", () => {
     managerSession.fetch = otherFetch;
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: NON_HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: managerSession,
@@ -3876,7 +3876,7 @@ describe("Solid Tours app shells", () => {
     try {
       act(() => {
         root.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: HANNAH_WEB_ID,
             demoWebId: HANNAH_WEB_ID,
             session: {
@@ -3886,7 +3886,7 @@ describe("Solid Tours app shells", () => {
           })
         );
         secondRoot.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: HANNAH_WEB_ID,
             demoWebId: HANNAH_WEB_ID,
             session: {
@@ -4032,7 +4032,7 @@ describe("Solid Tours app shells", () => {
     try {
       act(() =>
         root.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: HANNAH_WEB_ID,
             demoWebId: HANNAH_WEB_ID,
             session: {
@@ -4050,7 +4050,7 @@ describe("Solid Tours app shells", () => {
       expect(authoritativeRun()?.phase).toBe("publishing");
       act(() =>
         resetRoot.render(
-          createElement(SolidToursEmbed, {
+          createElement(CityToursEmbed, {
             webId: HANNAH_WEB_ID,
             demoWebId: HANNAH_WEB_ID,
             session: {
@@ -4133,12 +4133,12 @@ describe("Solid Tours app shells", () => {
       catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-activity-${scenarioRunId}.ttl#it`,
     }));
     podNetworkMocks.saveState.mockRejectedValue(
-      new StateConflictError("Der Solid-Tours-Status wurde zwischenzeitlich geändert.")
+      new StateConflictError("Der City-Tours-Status wurde zwischenzeitlich geändert.")
     );
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4195,7 +4195,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4274,7 +4274,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4361,7 +4361,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4418,7 +4418,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4548,7 +4548,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {
@@ -4691,7 +4691,7 @@ describe("Solid Tours app shells", () => {
         etag: '"state-v2"',
       }))
       .mockRejectedValueOnce(
-        new StateConflictError("Der Solid-Tours-Status wurde zwischenzeitlich geändert.")
+        new StateConflictError("Der City-Tours-Status wurde zwischenzeitlich geändert.")
       )
       .mockImplementationOnce(async (_root, nextState) => ({
         state: nextState,
@@ -4700,7 +4700,7 @@ describe("Solid Tours app shells", () => {
 
     act(() =>
       root.render(
-        createElement(SolidToursEmbed, {
+        createElement(CityToursEmbed, {
           webId: HANNAH_WEB_ID,
           demoWebId: HANNAH_WEB_ID,
           session: {

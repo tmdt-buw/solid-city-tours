@@ -247,13 +247,13 @@ export async function publishCatalogEntry({
   try {
     result = await publishRestrictedDataset(catalogSession(webId, fetcher), {
       // Newer Catalog API versions can use the resolved storage root directly.
-      // Older versions ignore this extension, but Solid Tours no longer rejects
+      // Older versions ignore this extension, but City Tours no longer rejects
       // valid WebID/Pod layouts before giving the Catalog API a chance to work.
       podRoot,
       identifier: datasetIdentifier,
       title: "Completed tours health-data donation",
       description:
-        "Restricted Solid Tours routes with their derived activity summaries.",
+        "Restricted City Tours routes with their derived activity summaries.",
       distributionUrl: resourceUrl,
       mediaType: "application/geo+json",
       publisher: profile.publisher,
@@ -513,7 +513,7 @@ export async function ensureRouteCatalogReadiness({
   return ensurePublicCatalogReadiness(catalogSession(webId, fetcher), {
     podRoot,
     registryUrl,
-    catalogTitle: "Solid Tours Catalog",
+    catalogTitle: "City Tours Catalog",
   });
 }
 
@@ -538,7 +538,7 @@ export async function publishRouteTemplateCatalogEntry({
     podRoot,
     identifier: datasetIdentifier,
     title: snapshot.properties.name,
-    description: "Public reusable route template from Solid Tours.",
+    description: "Public reusable route template from City Tours.",
     distributionUrl: resourceUrl,
     mediaType: ROUTE_TEMPLATE_MEDIA_TYPE,
     publisher: profile.publisher,
@@ -586,7 +586,7 @@ export async function updateRouteTemplateCatalogEntry({
     operationId,
     identifier: datasetIdentifier,
     title: snapshot.properties.name,
-    description: "Public reusable route template from Solid Tours.",
+    description: "Public reusable route template from City Tours.",
     distributionUrl: resourceUrl,
     mediaType: ROUTE_TEMPLATE_MEDIA_TYPE,
     publisher: profile.publisher,
