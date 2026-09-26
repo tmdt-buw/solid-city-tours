@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ const leafletMocks = vi.hoisted(() => {
   const map = {
     fitBounds: vi.fn(),
     invalidateSize: vi.fn(),
+    getCenter: vi.fn(() => ({ lng: 7.15, lat: 51.25 })),
     off: vi.fn(),
     on: vi.fn(),
     remove: vi.fn(),
@@ -201,7 +203,7 @@ const catalogMocks = vi.hoisted(() => ({
   updateRouteTemplateCatalogEntry: vi.fn(),
   discoverCatalogedRoutes: vi.fn(),
   ensureRouteCatalogReadiness: vi.fn(),
-  getCatalogedRouteDiscoveryReport: vi.fn(() => null),
+  getCatalogedRouteDiscoveryReport: vi.fn((): import("./catalog").CatalogRouteDiscoveryReport | null => null),
   loadPublicRegistryOptions: vi.fn(),
   loadRouteCatalogReadiness: vi.fn(),
   loadCatalogProfileMetadata: vi.fn(),
@@ -322,6 +324,13 @@ async function waitForDom(assertion: () => void): Promise<void> {
   throw lastError;
 }
 
+function requestAndConfirmDonation(container: HTMLElement, selector = ".publish") {
+  flushSync(() => container.querySelector<HTMLButtonElement>(selector)!.click());
+  const confirm = container.querySelector<HTMLButtonElement>('[data-testid="donation-confirmation-submit"]');
+  expect(confirm).not.toBeNull();
+  confirm!.click();
+}
+
 async function confirmDeleteDialog(container: HTMLElement): Promise<void> {
   await waitForDom(() => {
     const button = container.querySelector<HTMLButtonElement>(
@@ -360,6 +369,140 @@ async function acceptCityToursOnboarding(container: HTMLElement): Promise<void> 
 describe("City Tours app shells", () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  it("imports a file directly into an untouched initial editor", async () => {
+    act(() => root.render(createElement(CityToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector('input[type="file"]')).not.toBeNull());
+    const content = JSON.stringify({ type: "Feature", properties: { name: "Erster Import" }, geometry: { type: "LineString", coordinates: [[7.1, 51.2], [7.2, 51.3]] } });
+    const file = new File([content], "first.geojson");
+    Object.defineProperty(file, "text", { value: async () => content });
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(container.querySelector<HTMLInputElement>(".form-grid input")!.value).toBe("Erster Import");
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>(".save-draft-button")!.click());
+    expect(JSON.parse(window.localStorage.getItem(localStateKeyForIdentity(null))!).drafts).toHaveLength(1);
+  });
+
+  const firstCatalogRoute = {
+    routeTemplateId: "69020722-f94e-4d99-9aac-37b33d5607c7",
+    identifier: "solid-tours-route-template-69020722-f94e-4d99-9aac-37b33d5607c7",
+    name: "Katalogroute", description: "Eine Vorlage", publisher: "Tour Publisher",
+    datasetUrl: "https://pods.example/publisher/catalog/ds/route.ttl#it",
+    distributionUrl: "https://pods.example/publisher/public/route.geojson",
+    geometry: [[[7.3, 51.3], [7.4, 51.4]]], distanceMeters: 12000,
+  };
+
+  it("adopts the first catalog route into an empty library and selects the saved private copy", async () => {
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([firstCatalogRoute]);
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelector(".catalog-adopt")).not.toBeNull());
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-adopt")!.click());
+    await waitForDom(() => expect(container.querySelector(".draft-item")).not.toBeNull());
+    expect(container.querySelector(".edit-draft-button")).not.toBeNull();
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(podNetworkMocks.saveDraftConditionally).toHaveBeenCalledOnce();
+    const saved = podNetworkMocks.saveDraftConditionally.mock.calls[0][1];
+    expect(saved.adoptedFromCatalog.datasetUrl).toBe(firstCatalogRoute.datasetUrl);
+    expect(saved.id).not.toBe(firstCatalogRoute.routeTemplateId);
+    expect(saved.durationMinutes).toBeUndefined();
+    expect(container.querySelector(".catalog-route-list .empty")?.textContent).toContain("bereits");
+    expect(catalogMocks.publishRouteTemplateCatalogEntry).not.toHaveBeenCalled();
+  });
+
+  it("keeps an explicit catalog preview open when focus and pointer move to the map", async () => {
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([firstCatalogRoute]);
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelector(".catalog-preview")).not.toBeNull());
+    act(() => container.querySelector<HTMLButtonElement>(".catalog-preview")!.click());
+    const preview = container.querySelector<HTMLElement>(".catalog-route-item")!;
+    act(() => {
+      preview.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: container.querySelector(".tour-map") }));
+      container.querySelector<HTMLButtonElement>(".fit-route-button")!.focus();
+    });
+    expect(preview.classList.contains("is-previewed")).toBe(true);
+    expect(container.querySelector(".map-preview-label")?.textContent).toContain("Katalogroute");
+    act(() => container.querySelector<HTMLButtonElement>(".map-preview-label button")!.click());
+    expect(preview.classList.contains("is-previewed")).toBe(false);
+  });
+
+  it("reports catalog failures locally and allows retry without losing the editor", async () => {
+    catalogMocks.discoverCatalogedRoutes.mockRejectedValueOnce(new Error("Offline")).mockResolvedValue([firstCatalogRoute]);
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelector(".catalog-status [role='alert']")?.textContent).toContain("Der Katalog konnte nicht aktualisiert werden"));
+    expect(container.querySelector(".workspace-error")).toBeNull();
+    expect(container.querySelector(".catalog-route-list .empty")?.textContent).not.toContain("Keine öffentlichen");
+    await act(async () => container.querySelector<HTMLButtonElement>(".catalog-retry")!.click());
+    await waitForDom(() => expect(container.querySelector(".catalog-adopt")).not.toBeNull());
+    expect(container.querySelector(".catalog-status [role='alert']")).toBeNull();
+  });
+
+  it("discloses partial catalog loading while leaving usable templates available", async () => {
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue([firstCatalogRoute]);
+    catalogMocks.getCatalogedRouteDiscoveryReport.mockReturnValue({ candidateCount: 55, processedCount: 50, truncatedCount: 5, failures: [{ identifier: "broken", datasetUrl: "https://example.org/broken", distributionUrl: "https://example.org/file", code: "route-template-rejected", message: "Bad template" }] });
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelector(".catalog-status summary")?.textContent).toContain("1 Einträge"));
+    expect(container.querySelector(".catalog-status summary")?.textContent).toContain("5 über dem Ladelimit");
+    expect(container.querySelector<HTMLButtonElement>(".catalog-adopt")!.disabled).toBe(false);
+  });
+
+  it("shows the first point, keeps the map view stable while drawing, and restores a cleared route", async () => {
+    act(() => root.render(createElement(CityToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector(".tour-map")).not.toBeNull());
+    const handleClick = leafletMocks.map.on.mock.calls.find(([name]) => name === "click")![1];
+    const fitted = leafletMocks.map.fitBounds.mock.calls.length;
+    act(() => handleClick({ latlng: { lng: 7.15, lat: 51.25 } }));
+    expect(leafletMocks.circleMarkerFactory).toHaveBeenLastCalledWith([51.25, 7.15], expect.any(Object));
+    act(() => handleClick({ latlng: { lng: 7.17, lat: 51.27 } }));
+    expect(leafletMocks.map.fitBounds).toHaveBeenCalledTimes(fitted);
+    act(() => container.querySelector<HTMLButtonElement>(".map-tool-button--danger")!.click());
+    expect(container.querySelector(".map-stats")?.textContent).toContain("0,0 km");
+    act(() => container.querySelector<HTMLButtonElement>(".map-tool-button")!.click());
+    expect(container.querySelector(".map-stats")?.textContent).not.toContain("0,0 km");
+    act(() => container.querySelector<HTMLButtonElement>(".fit-route-button")!.click());
+    expect(leafletMocks.map.fitBounds).toHaveBeenCalledTimes(fitted + 1);
+    act(() => container.querySelector<HTMLElement>(".tour-map")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(leafletMocks.map.getCenter).toHaveBeenCalled();
+  });
+
+  it("saves dirty work before continuing to a fresh draft and warns only while dirty", async () => {
+    window.localStorage.setItem(localStateKeyForIdentity(null), JSON.stringify(localStateWithActivity));
+    act(() => root.render(createElement(CityToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
+    act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
+    const input = container.querySelector<HTMLInputElement>(".form-grid input")!;
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Gespeicherte Änderung"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    const before = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(before);
+    expect(before.defaultPrevented).toBe(true);
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Neue Tour"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>(".confirm-dialog .primary")!.click());
+    await waitForDom(() => expect(input.value).toBe("Neue Tour in Wuppertal"));
+    expect(JSON.parse(window.localStorage.getItem(localStateKeyForIdentity(null))!).drafts[0].name).toBe("Gespeicherte Änderung");
+    const after = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it("keeps focus in a confirmation and returns it on Escape", async () => {
+    window.localStorage.setItem(localStateKeyForIdentity(null), JSON.stringify(localStateWithActivity));
+    act(() => root.render(createElement(CityToursEmbed, {})));
+    await waitForDom(() => expect(container.querySelector(".tour-completion .primary")).not.toBeNull());
+    const trigger = container.querySelector<HTMLButtonElement>(".tour-completion .primary")!;
+    trigger.focus();
+    act(() => trigger.click());
+    const dialog = container.querySelector<HTMLDialogElement>("dialog")!;
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    const first = dialog.querySelector<HTMLInputElement>("input")!;
+    first.focus();
+    act(() => first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })));
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    act(() => dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 
   beforeEach(() => {
     window.localStorage.clear();
@@ -576,165 +719,56 @@ describe("City Tours app shells", () => {
     expect(container.textContent).toContain("Suggested providers");
   });
 
-  it("repairs standalone Inbox and public Catalog setup without requiring Manager onboarding", async () => {
+  it("sets up private standalone storage without public side effects, then configures sharing explicitly", async () => {
     podNetworkMocks.loadCityToursOnboarding.mockResolvedValue(null);
-    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
-      catalogConfigured: false,
-      publicRegistries: [],
-    });
-    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({
-      configured: false,
-      inboxUrl: "https://pods.example/alex/inbox/",
-    });
-
+    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({ catalogConfigured: false, publicRegistries: [] });
+    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({ configured: false });
     act(() => root.render(createElement(App, { webIdOverride: NON_HANNAH_WEB_ID })));
-
-    await waitForDom(() => {
-      expect(container.querySelector(".tours-onboarding--standalone")).not.toBeNull();
-    });
-    expect(container.textContent).toContain("Solid Inbox for access requests");
-    expect(container.textContent).toContain("You do not need to complete the Dataspace Manager onboarding first");
-    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
-
     await acceptCityToursOnboarding(container);
     await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
-
-    expect(accessRequestMocks.ensureCityToursInbox).toHaveBeenCalledWith({
-      podRoot: "https://pods.example/alex/",
-      webId: NON_HANNAH_WEB_ID,
-      fetcher: expect.any(Function),
-    });
-    expect(catalogMocks.saveCatalogProfileMetadata).toHaveBeenCalledWith({
-      webId: NON_HANNAH_WEB_ID,
-      publisher: "Alex Example",
-      contactEmail: "alex@example.org",
-      fetcher: expect.any(Function),
-    });
+    expect(podNetworkMocks.ensureStorage).toHaveBeenCalledOnce();
+    expect(catalogMocks.saveCatalogProfileMetadata).not.toHaveBeenCalled();
+    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
+    expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
+    expect(podNetworkMocks.saveCityToursOnboarding.mock.calls[0][1]).toMatchObject({ schemaVersion: 3 });
+    expect(podNetworkMocks.saveCityToursOnboarding.mock.calls[0][1].publicPublishingAcceptedAt).toBeUndefined();
+    act(() => container.querySelector<HTMLButtonElement>(".sharing-panel > .primary")!.click());
+    await acceptCityToursOnboarding(container);
+    await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
+    expect(catalogMocks.saveCatalogProfileMetadata).toHaveBeenCalledOnce();
+    expect(accessRequestMocks.ensureCityToursInbox).toHaveBeenCalledOnce();
+    expect(catalogMocks.ensureRouteCatalogReadiness).toHaveBeenCalledOnce();
     expect(catalogMocks.saveCatalogProfileMetadata.mock.invocationCallOrder[0]).toBeLessThan(accessRequestMocks.ensureCityToursInbox.mock.invocationCallOrder[0]);
-    expect(catalogMocks.ensureRouteCatalogReadiness).toHaveBeenCalledWith({
-      podRoot: "https://pods.example/alex/",
-      webId: NON_HANNAH_WEB_ID,
-      registryUrl: "https://registry.example/research",
-      fetcher: expect.any(Function),
-    });
-    expect(podNetworkMocks.saveCityToursOnboarding).toHaveBeenCalledWith(
-      "https://pods.example/alex/",
-      expect.objectContaining({
-        schemaVersion: 2,
-        app: "solid-tours",
-        publicRegistryUrl: "https://registry.example/research",
-      }),
-      NON_HANNAH_WEB_ID,
-      expect.any(Function)
-    );
-    expect(
-      accessRequestMocks.ensureCityToursInbox.mock.invocationCallOrder[0]
-    ).toBeLessThan(catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]);
-    expect(
-      catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]
-    ).toBeLessThan(podNetworkMocks.ensureStorage.mock.invocationCallOrder[0]);
-    expect(accessRequestMocks.resolveSolidInbox).not.toHaveBeenCalled();
+    expect(accessRequestMocks.ensureCityToursInbox.mock.invocationCallOrder[0]).toBeLessThan(catalogMocks.ensureRouteCatalogReadiness.mock.invocationCallOrder[0]);
+    expect(podNetworkMocks.saveCityToursOnboarding.mock.calls.at(-1)![1]).toMatchObject({ schemaVersion: 2, publicRegistryUrl: "https://registry.example/research" });
+    expect(catalogMocks.publishCatalogEntry).not.toHaveBeenCalled();
   });
 
-  it("revalidates a saved record and blocks embed setup when the Inbox was revoked", async () => {
-    accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({
-      configured: false,
-      inboxUrl: "https://pods.example/alex/inbox/",
-    });
-
-    act(() =>
-      root.render(
-        createElement(CityToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
-        })
-      )
-    );
-
-    await waitForDom(() => {
-      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
-    });
-    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
-    expect(container.textContent).not.toContain("Solid-Inbox für Zugriffsanfragen");
-    expect(container.querySelector('input[type="radio"]')).toBeNull();
-    expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-      "allgemeine Dataspace-Onboarding"
-    );
-    act(() => {
-      container
-        .querySelectorAll<HTMLInputElement>('.tours-onboarding input[type="checkbox"]')
-        .forEach((checkbox) => checkbox.click());
-    });
-    expect(
-      container.querySelector<HTMLButtonElement>(".tours-onboarding button.primary")?.disabled
-    ).toBe(true);
-    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
+  it.each(["inbox", "registry", "profile"])("keeps private tours available when publishing %s readiness is missing", async (missing) => {
+    if (missing === "inbox") accessRequestMocks.getCityToursInboxReadiness.mockResolvedValue({ configured: false });
+    if (missing === "registry") catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({ catalogConfigured: false, publicRegistries: [] });
+    if (missing === "profile") catalogMocks.loadCatalogProfileMetadata.mockResolvedValue({ publisher: "", contactEmail: "" });
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
+    expect(podNetworkMocks.ensureStorage).toHaveBeenCalledOnce();
+    act(() => container.querySelector<HTMLButtonElement>(".sharing-panel > .primary")!.click());
+    await waitForDom(() => expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull());
+    act(() => container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => box.click()));
+    expect(container.querySelector<HTMLButtonElement>(".tours-onboarding button.primary")!.disabled).toBe(true);
     expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
-    expect(container.querySelector(".route-workspace")).toBeNull();
+    expect(catalogMocks.publishCatalogEntry).not.toHaveBeenCalled();
+    expect(container.querySelector('a[href="/profile"], a[href="/"]')).not.toBeNull();
   });
 
-  it("does not let a saved onboarding record bypass a removed public registry", async () => {
-    catalogMocks.loadRouteCatalogReadiness.mockResolvedValue({
-      catalogConfigured: false,
-      publicRegistries: [],
-    });
-
-    act(() =>
-      root.render(
-        createElement(CityToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
-        })
-      )
-    );
-
-    await waitForDom(() => {
-      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
-    });
-    expect(podNetworkMocks.ensureStorage).not.toHaveBeenCalled();
-    expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-      "allgemeine Dataspace-Onboarding"
-    );
-    expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
-    expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
-    expect(container.querySelector(".route-workspace")).toBeNull();
-  });
-
-  it("accepts only app-specific consent in embed mode when Dataspace readiness exists", async () => {
+  it("accepts private embedded setup with no public acknowledgement", async () => {
     podNetworkMocks.loadCityToursOnboarding.mockResolvedValue(null);
-
-    act(() =>
-      root.render(
-        createElement(CityToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
-        })
-      )
-    );
-
-    await waitForDom(() => {
-      expect(container.querySelector(".tours-onboarding--embedded")).not.toBeNull();
-    });
-    expect(container.textContent).not.toContain("Solid-Inbox für Zugriffsanfragen");
-    expect(container.textContent).not.toContain("Öffentliche Forschungs-Registry");
-    expect(container.querySelector('input[type="radio"]')).toBeNull();
-
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
     await acceptCityToursOnboarding(container);
     await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
-
     expect(accessRequestMocks.ensureCityToursInbox).not.toHaveBeenCalled();
     expect(catalogMocks.ensureRouteCatalogReadiness).not.toHaveBeenCalled();
-    expect(catalogMocks.loadRouteCatalogReadiness).toHaveBeenCalledTimes(2);
-    expect(accessRequestMocks.getCityToursInboxReadiness).toHaveBeenCalledTimes(2);
-    expect(podNetworkMocks.saveCityToursOnboarding).toHaveBeenCalledWith(
-      "https://pods.example/alex/",
-      expect.objectContaining({
-        schemaVersion: 2,
-        publicRegistryUrl: "https://registry.example/research",
-      }),
-      NON_HANNAH_WEB_ID,
-      expect.any(Function)
-    );
+    expect(podNetworkMocks.saveCityToursOnboarding.mock.calls[0][1]).toMatchObject({ schemaVersion: 3 });
+    expect(podNetworkMocks.saveCityToursOnboarding.mock.calls[0][1].publicPublishingAcceptedAt).toBeUndefined();
   });
 
   it("uses Pod storage and shows the standalone shell for an arbitrary Solid login", async () => {
@@ -770,7 +804,8 @@ describe("City Tours app shells", () => {
     const planner = workspace.querySelector<HTMLElement>(":scope > .planner-panel");
     const mapStage = workspace.querySelector<HTMLElement>(":scope > .map-stage");
 
-    expect(workspace.children).toHaveLength(2);
+    expect(workspace.querySelector(".workspace-nav")).not.toBeNull();
+    expect(workspace.querySelector(".mobile-view-toggle")).not.toBeNull();
     expect(mapStage?.classList.contains("map-stage")).toBe(true);
     expect(mapStage?.querySelector(":scope > .tour-map")).not.toBeNull();
     expect(planner?.parentElement).toBe(workspace);
@@ -874,7 +909,7 @@ describe("City Tours app shells", () => {
     expect(container.querySelector(".map-hint")).toBeNull();
     expect(container.textContent).not.toContain("Beispielrouten zum Importieren");
     expect(container.textContent).not.toContain("Route zeichnen");
-    expect(container.textContent).toContain("Gesundheitsdatenspende freigeben");
+    expect(container.textContent).toContain("Spende vorbereiten");
     expect(container.textContent).not.toContain("Szenario zurücksetzen");
     expect(container.textContent).not.toContain("Lokal");
     expect(container.textContent).not.toContain("Route & Aktivität");
@@ -895,17 +930,16 @@ describe("City Tours app shells", () => {
     expect(leafletMocks.mapFactory).toHaveBeenCalledOnce();
 
     const completeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Tour gemacht"
+      (button) => button.textContent === "Als absolviert eintragen"
     );
     expect(completeButton).toBeDefined();
     const myToursCard = Array.from(container.querySelectorAll<HTMLElement>(".list-card")).find(
       (card) => card.querySelector("h2")?.textContent === "Meine Touren"
     );
     expect(myToursCard).toBeDefined();
-    const tourCompletion = myToursCard!.querySelector(".tour-completion");
-    expect(myToursCard!.lastElementChild).toBe(tourCompletion);
+    const tourCompletion = container.querySelector(".panel-section--planner .tour-completion");
+    expect(tourCompletion).not.toBeNull();
     expect(tourCompletion!.lastElementChild).toBe(completeButton);
-    expect(container.querySelector(".panel-section--planner .primary")).toBeNull();
     expect(container.querySelector(".panel-section--planner .edit-draft-button")?.textContent).toBe(
       "Route bearbeiten"
     );
@@ -913,7 +947,8 @@ describe("City Tours app shells", () => {
     expect(container.querySelector(".planner-panel .map-stats")).toBeNull();
     expect(container.querySelector(".map-edit-toolbar")).toBeNull();
     expect(container.textContent).toContain("20.08.2026");
-    const completedDateInput = myToursCard!.querySelector<HTMLInputElement>(".tour-completion input")!;
+    act(() => completeButton!.click());
+    const completedDateInput = container.querySelector<HTMLInputElement>(".completion-date-field input")!;
     act(() => {
       const valueSetter = Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -922,11 +957,10 @@ describe("City Tours app shells", () => {
       valueSetter.call(completedDateInput, "19.08.2026");
       completedDateInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    act(() => completeButton!.click());
-    expect(container.querySelector(".modal-backdrop")).not.toBeNull();
+    expect(container.querySelector("dialog[open]")).not.toBeNull();
     expect(container.querySelector(".confirm-dialog")).not.toBeNull();
     expect(container.querySelector(".city-tours-app--modal-open")).not.toBeNull();
-    expect(container.querySelector(".confirm-dialog")?.textContent).toContain("19.08.2026");
+    expect(completedDateInput.value).toBe("19.08.2026");
     const dialogSave = container.querySelector<HTMLButtonElement>(".confirm-dialog .primary")!;
     expect(dialogSave.textContent).toBe("Speichern");
     expect(dialogSave.disabled).toBe(true);
@@ -1058,7 +1092,7 @@ describe("City Tours app shells", () => {
       act(() => reactProps.onClick!());
 
       await waitForDom(() => {
-        expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+        expect(container.querySelector(".workspace-error")?.textContent).toContain(
           "Die Routenvorlage ist erst nach Abschluss der laufenden Katalogaktion wieder bearbeitbar."
         );
       });
@@ -1155,7 +1189,7 @@ describe("City Tours app shells", () => {
     act(() =>
       mapClickRegistration[1]({ latlng: { lng: 7.24, lat: 51.29 } })
     );
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
 
     act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
     expect(container.querySelector(".public-route-edit-hint")?.textContent).toContain(
@@ -1502,7 +1536,7 @@ describe("City Tours app shells", () => {
     );
 
     await waitForDom(() =>
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "nicht vollständig entfernt"
       )
     );
@@ -1558,7 +1592,7 @@ describe("City Tours app shells", () => {
     );
 
     await waitForDom(() =>
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "gerade veröffentlicht"
       )
     );
@@ -1614,7 +1648,7 @@ describe("City Tours app shells", () => {
     );
 
     await waitForDom(() =>
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "anderen Tab entfernt"
       )
     );
@@ -1777,7 +1811,7 @@ describe("City Tours app shells", () => {
     await confirmDeleteDialog(container);
 
     await waitForDom(() =>
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "öffentlichen Routenkatalog"
       )
     );
@@ -1804,9 +1838,7 @@ describe("City Tours app shells", () => {
       zoomInTitle: "Zoom in",
       zoomOutTitle: "Zoom out",
     });
-    expect(container.querySelector<HTMLInputElement>(".tour-completion input")?.placeholder).toBe(
-      "DD.MM.YYYY"
-    );
+    expect(container.querySelector(".completion-date-field input")).toBeNull();
     act(() => {
       window.dispatchEvent(
         new CustomEvent(TOURS_LANGUAGE_EVENT, { detail: { language: "de" } })
@@ -1829,7 +1861,7 @@ describe("City Tours app shells", () => {
     await waitForDom(() => expect(container.querySelector(".edit-draft-button")).not.toBeNull());
     const completeButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) => button.textContent === "Tour completed")!;
+    ).find((button) => button.textContent === "Record activity")!;
     act(() => completeButton.click());
     expect(container.querySelector(".confirm-dialog")?.textContent).toContain(
       "Save this tour as completed?"
@@ -1855,46 +1887,28 @@ describe("City Tours app shells", () => {
     expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
       "Hannah's custom route"
     );
-    expect(container.querySelector<HTMLInputElement>(".tour-completion input")?.placeholder).toBe(
+    expect(container.querySelector<HTMLInputElement>(".completion-date-field input")?.placeholder).toBe(
       "TT.MM.JJJJ"
     );
   });
 
   it("marks invalid English date input without depending on German error copy", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
-    act(() =>
-      root.render(
-        createElement(RawCityToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
-          language: "en",
-        })
-      )
-    );
-    await waitForDom(() => expect(container.textContent).toContain("Tour planner"));
-
-    const dateInput = container.querySelector<HTMLInputElement>(".tour-completion input")!;
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    act(() => root.render(createElement(RawCityToursEmbed, { webId: NON_HANNAH_WEB_ID, language: "en" })));
+    await waitForDom(() => expect(container.querySelector(".tour-completion .primary")).not.toBeNull());
+    act(() => container.querySelector<HTMLButtonElement>(".tour-completion .primary")!.click());
+    const dateInput = container.querySelector<HTMLInputElement>(".completion-date-field input")!;
     act(() => {
-      const valueSetter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )!.set!;
-      valueSetter.call(dateInput, "31.02.2026");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dateInput, "31.02.2026");
       dateInput.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector<HTMLInputElement>('input[value="walking"]')!.click();
     });
-    const completeButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) => button.textContent === "Tour completed")!;
-    act(() => completeButton.click());
-
+    act(() => container.querySelector<HTMLButtonElement>(".confirm-dialog .primary")!.click());
     expect(dateInput.getAttribute("aria-invalid")).toBe("true");
-    expect(dateInput.getAttribute("aria-describedby")).toBe("map-error-message");
-    expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-      "Invalid date"
-    );
+    expect(dateInput.getAttribute("aria-describedby")).toBe("completion-date-error");
+    expect(container.querySelector("#completion-date-error")?.textContent).toContain("Invalid date");
+    expect(container.querySelector("dialog[open]")).not.toBeNull();
+    expect(podNetworkMocks.saveActivityConditionally).not.toHaveBeenCalled();
   });
 
   it("does not translate a user-entered name that equals a generated default", async () => {
@@ -1935,7 +1949,7 @@ describe("City Tours app shells", () => {
     );
   });
 
-  it("shows map editing actions only while the current route contains points", async () => {
+  it("keeps undo available after clearing the route", async () => {
     act(() =>
       root.render(
         createElement(CityToursEmbed, {
@@ -1965,7 +1979,11 @@ describe("City Tours app shells", () => {
     ).find((button) => button.textContent === "Route leeren");
     expect(clearButton).toBeDefined();
     act(() => clearButton!.click());
-    expect(container.querySelector(".map-edit-toolbar")).toBeNull();
+    expect(container.querySelector(".map-edit-toolbar")).not.toBeNull();
+    const undo = container.querySelector<HTMLButtonElement>(".map-tool-button")!;
+    expect(undo.disabled).toBe(false);
+    act(() => undo.click());
+    expect(clearButton!.disabled).toBe(false);
   });
 
   it("renders smooth routes without per-vertex dots and uses map clicks for selection in view mode", async () => {
@@ -1991,7 +2009,8 @@ describe("City Tours app shells", () => {
     act(() => root.render(createElement(CityToursEmbed, {})));
     await waitForDom(() => expect(container.querySelectorAll(".draft-item")).toHaveLength(2));
 
-    expect(leafletMocks.circleMarkerFactory).not.toHaveBeenCalled();
+    expect(leafletMocks.circleMarkerFactory).toHaveBeenCalled();
+    expect(leafletMocks.circleMarkerFactory.mock.calls.length).toBeLessThan(10);
     expect(leafletMocks.polylineFactory.mock.calls).toEqual(
       expect.arrayContaining([
         expect.arrayContaining([
@@ -2015,7 +2034,7 @@ describe("City Tours app shells", () => {
     const renderCountBeforeViewClick = leafletMocks.polylineFactory.mock.calls.length;
     act(() => handleMapClick({ latlng: { lng: 7.25, lat: 51.3 } }));
     expect(leafletMocks.polylineFactory).toHaveBeenCalledTimes(renderCountBeforeViewClick);
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
 
     const selectableRouteLayer = leafletMocks.routeLayers.find(
       (layer) =>
@@ -2032,7 +2051,7 @@ describe("City Tours app shells", () => {
     expect(
       container.querySelector<HTMLButtonElement>('.list-item[aria-current="true"]')?.textContent
     ).toContain("Nordbahntrasse");
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
 
     act(() => container.querySelector<HTMLButtonElement>(".edit-draft-button")!.click());
     const activeRouteLayer = [...leafletMocks.routeLayers]
@@ -2098,7 +2117,7 @@ describe("City Tours app shells", () => {
       "imported-route.geojson",
       { type: "application/geo+json" }
     );
-    const fileInput = container.querySelector<HTMLInputElement>(".file-button input")!;
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     Object.defineProperty(fileInput, "files", {
       configurable: true,
       value: [routeFile],
@@ -2108,9 +2127,8 @@ describe("City Tours app shells", () => {
     });
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-        "Speichere oder verwirf zuerst die aktuellen Änderungen."
-      );
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Ungespeicherte Änderungen");
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Verwerfen und weiter");
     });
     expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
       "Ungespeicherte Änderungen"
@@ -2146,9 +2164,8 @@ describe("City Tours app shells", () => {
     await act(async () => duplicateButton.click());
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-        "Speichere oder verwirf zuerst die aktuellen Änderungen."
-      );
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Ungespeicherte Änderungen");
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Verwerfen und weiter");
     });
     expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
       "Ungespeicherte Änderungen"
@@ -2207,9 +2224,8 @@ describe("City Tours app shells", () => {
     );
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
-        "Speichere oder verwirf zuerst die aktuellen Änderungen."
-      );
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Ungespeicherte Änderungen");
+      expect(container.querySelector(".confirm-dialog")?.textContent).toContain("Verwerfen und weiter");
     });
     expect(container.querySelector<HTMLInputElement>(".form-grid input")?.value).toBe(
       "Ungespeicherte Änderungen"
@@ -2494,41 +2510,22 @@ describe("City Tours app shells", () => {
   });
 
   it("blocks completion for an invalid German calendar date", async () => {
-    window.localStorage.setItem(
-      localStateKeyForIdentity(NON_HANNAH_WEB_ID),
-      JSON.stringify(localStateWithActivity)
-    );
-    act(() =>
-      root.render(
-        createElement(CityToursEmbed, {
-          webId: NON_HANNAH_WEB_ID,
-          demoWebId: HANNAH_WEB_ID,
-        })
-      )
-    );
-
-    await waitForDom(() => {
-      expect(container.querySelector(".tour-completion input")).not.toBeNull();
-    });
-    const dateInput = container.querySelector<HTMLInputElement>(".tour-completion input")!;
+    podNetworkMocks.loadState.mockResolvedValue(localStateWithActivity);
+    act(() => root.render(createElement(RawCityToursEmbed, { webId: NON_HANNAH_WEB_ID, language: "de" })));
+    await waitForDom(() => expect(container.querySelector(".tour-completion .primary")).not.toBeNull());
+    act(() => container.querySelector<HTMLButtonElement>(".tour-completion .primary")!.click());
+    const dateInput = container.querySelector<HTMLInputElement>(".completion-date-field input")!;
     act(() => {
-      const valueSetter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )!.set!;
-      valueSetter.call(dateInput, "31.02.2026");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dateInput, "31.02.2026");
       dateInput.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector<HTMLInputElement>('input[value="walking"]')!.click();
     });
-
-    const completeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Tour gemacht"
-    )!;
-    act(() => completeButton.click());
-
-    expect(container.querySelector(".modal-backdrop")).toBeNull();
+    act(() => container.querySelector<HTMLButtonElement>(".confirm-dialog .primary")!.click());
     expect(dateInput.getAttribute("aria-invalid")).toBe("true");
-    expect(container.querySelector(".map-error-overlay")?.textContent).toContain("TT.MM.JJJJ");
-    expect(container.querySelector(".map-error-overlay")?.getAttribute("role")).toBe("alert");
+    expect(dateInput.getAttribute("aria-describedby")).toBe("completion-date-error");
+    expect(container.querySelector("#completion-date-error")?.textContent).toContain("TT.MM.JJJJ");
+    expect(container.querySelector("dialog[open]")).not.toBeNull();
+    expect(podNetworkMocks.saveActivityConditionally).not.toHaveBeenCalled();
   });
 
   it("does not show a success notification after saving a completed tour", async () => {
@@ -2547,7 +2544,7 @@ describe("City Tours app shells", () => {
     });
 
     const completeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Tour gemacht"
+      (button) => button.textContent === "Als absolviert eintragen"
     )!;
     act(() => completeButton.click());
     act(() => {
@@ -2583,7 +2580,7 @@ describe("City Tours app shells", () => {
       expect(container.querySelectorAll(".activity-item")).toHaveLength(1);
     });
     const completeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Tour gemacht"
+      (button) => button.textContent === "Als absolviert eintragen"
     )!;
     act(() => completeButton.click());
 
@@ -2689,7 +2686,7 @@ describe("City Tours app shells", () => {
       expect(loadingCard.querySelector('[role="progressbar"]')?.hasAttribute("aria-valuenow")).toBe(
         false
       );
-      expect(container.querySelector(".confirm-dialog")).toBeNull();
+      expect(container.querySelector(".confirm-dialog:not(.completion-loading-card)")).toBeNull();
       expect(container.querySelector(".city-tours-app--modal-open")).not.toBeNull();
       expect(container.querySelector(`.city-tours-app--${mode === "embed" ? "embedded" : "standalone"}`)).not.toBeNull();
 
@@ -2748,7 +2745,7 @@ describe("City Tours app shells", () => {
     });
     await waitForDom(() => {
       expect(container.querySelector('[data-testid="completion-loading-overlay"]')).toBeNull();
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "Die private Aktivität konnte nicht gespeichert werden."
       );
     });
@@ -2905,7 +2902,7 @@ describe("City Tours app shells", () => {
     });
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "zwischenzeitlich geändert"
       );
       expect(container.textContent).toContain("Remote Tour");
@@ -3158,7 +3155,7 @@ describe("City Tours app shells", () => {
       expect.any(Function)
     );
     expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledOnce();
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
   });
 
   it("verifies the full master before rolling state back when DELETE cannot be verified", async () => {
@@ -3205,7 +3202,7 @@ describe("City Tours app shells", () => {
     await confirmDeleteDialog(container);
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "vorherige Pod-Zustand wiederhergestellt"
       );
     });
@@ -3527,7 +3524,7 @@ describe("City Tours app shells", () => {
     await confirmDeleteDialog(container);
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "keinen starken Versionsnachweis"
       );
     });
@@ -3574,7 +3571,7 @@ describe("City Tours app shells", () => {
     await confirmDeleteDialog(container);
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "zwischenzeitlich verändert"
       );
       expect(container.querySelector(".activity-item")?.textContent).toContain(
@@ -3651,7 +3648,7 @@ describe("City Tours app shells", () => {
     });
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "fail-closed ohne Aktivitätsverweis belassen"
       );
     });
@@ -3666,7 +3663,7 @@ describe("City Tours app shells", () => {
     ).toBeNull();
   });
 
-  it("shows action errors as a dismissible map overlay without reserving planner space", async () => {
+  it("shows dismissible action errors beside the planner without covering map controls", async () => {
     act(() =>
       root.render(
         createElement(CityToursEmbed, {
@@ -3684,17 +3681,18 @@ describe("City Tours app shells", () => {
     });
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "Die Tour braucht mindestens zwei Punkte."
       );
     });
-    const overlay = container.querySelector(".map-error-overlay")!;
+    const overlay = container.querySelector(".workspace-error")!;
     expect(overlay.getAttribute("role")).toBe("alert");
-    expect(overlay.closest(".map-stage")).not.toBeNull();
+    expect(overlay.closest(".planner-scroll")).not.toBeNull();
+    expect(overlay.closest(".map-stage")).toBeNull();
     expect(container.querySelector(".tours-shell > .notice")).toBeNull();
     const close = overlay.querySelector<HTMLButtonElement>('[aria-label="Fehlermeldung schließen"]')!;
     act(() => close.click());
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
   });
 
   it("keeps the deprecated demo-WebID prop compatible without gating Pod access", async () => {
@@ -3708,7 +3706,7 @@ describe("City Tours app shells", () => {
     );
 
     await waitForDom(() => expect(container.querySelector(".route-workspace")).not.toBeNull());
-    expect(container.querySelector(".map-error-overlay")).toBeNull();
+    expect(container.querySelector(".workspace-error")).toBeNull();
     expect(podNetworkMocks.resolvePodRoot).toHaveBeenCalledWith(
       NON_HANNAH_WEB_ID,
       expect.any(Function)
@@ -3746,7 +3744,7 @@ describe("City Tours app shells", () => {
       expect(container.querySelector(".publish")).not.toBeNull();
     });
 
-    expect(container.textContent).toContain("Gesundheitsdatenspende freigeben");
+    expect(container.textContent).toContain("Spende vorbereiten");
     expect(container.querySelector(".scenario-card")).toBeNull();
     expect(container.textContent).not.toContain("Environmental Monitoring");
     expect(container.textContent).not.toContain("Bereit zum Veröffentlichen");
@@ -3902,8 +3900,8 @@ describe("City Tours app shells", () => {
       });
 
       act(() => {
-        container.querySelector<HTMLButtonElement>(".publish")!.click();
-        secondContainer.querySelector<HTMLButtonElement>(".publish")!.click();
+        requestAndConfirmDonation(container);
+        requestAndConfirmDonation(secondContainer);
       });
       await waitForDom(() => {
         expect(catalogMocks.publishCatalogEntry).toHaveBeenCalledOnce();
@@ -4043,7 +4041,7 @@ describe("City Tours app shells", () => {
         )
       );
       await waitForDom(() => expect(container.querySelector(".publish")).not.toBeNull());
-      act(() => container.querySelector<HTMLButtonElement>(".publish")!.click());
+      act(() => requestAndConfirmDonation(container));
       await waitForDom(() => expect(catalogMocks.publishCatalogEntry).toHaveBeenCalledOnce());
 
       const firstRunId = authoritativeRun()!.scenarioRunId;
@@ -4061,7 +4059,7 @@ describe("City Tours app shells", () => {
         )
       );
       await waitForDom(() => expect(resetContainer.querySelector(".danger")).not.toBeNull());
-      await act(async () => resetContainer.querySelector<HTMLButtonElement>(".danger")!.click());
+      await act(async () => requestAndConfirmDonation(resetContainer, ".health-donation-actions .danger"));
       await waitForDom(() => {
         expect(authoritativeState.activeRun).toBeNull();
         expect(resetContainer.querySelector(".publish")).not.toBeNull();
@@ -4080,7 +4078,7 @@ describe("City Tours app shells", () => {
       await waitForDom(() => {
         expect(markerRunId).toBeNull();
         expect(catalogRunId).toBeNull();
-        expect(container.querySelector(".map-error-overlay")).not.toBeNull();
+        expect(container.querySelector(".workspace-error")).not.toBeNull();
       });
       expect(authoritativeState.activeRun).toBeNull();
       expect(podNetworkMocks.clearPublishedMarker).toHaveBeenCalledWith(
@@ -4089,7 +4087,7 @@ describe("City Tours app shells", () => {
         expect.any(Function)
       );
 
-      await act(async () => resetContainer.querySelector<HTMLButtonElement>(".publish")!.click());
+      await act(async () => requestAndConfirmDonation(resetContainer));
       await waitForDom(() => {
         expect(authoritativeRun()?.phase).toBe("published");
         expect(catalogMocks.publishCatalogEntry).toHaveBeenCalledTimes(2);
@@ -4149,10 +4147,10 @@ describe("City Tours app shells", () => {
       )
     );
     await waitForDom(() => expect(container.querySelector(".publish")).not.toBeNull());
-    await act(async () => container.querySelector<HTMLButtonElement>(".publish")!.click());
+    await act(async () => requestAndConfirmDonation(container));
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "vollständig zurückgerollt"
       );
       expect(container.textContent).toContain("Remote nach Publish-Konflikt");
@@ -4206,10 +4204,10 @@ describe("City Tours app shells", () => {
       )
     );
     await waitForDom(() => expect(container.querySelector(".publish")).not.toBeNull());
-    await act(async () => container.querySelector<HTMLButtonElement>(".publish")!.click());
+    await act(async () => requestAndConfirmDonation(container));
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain(
+      expect(container.querySelector(".workspace-error")?.textContent).toContain(
         "vollständig zurückgerollt"
       );
     });
@@ -4285,10 +4283,10 @@ describe("City Tours app shells", () => {
       )
     );
     await waitForDom(() => expect(container.querySelector(".publish")).not.toBeNull());
-    await act(async () => container.querySelector<HTMLButtonElement>(".publish")!.click());
+    await act(async () => requestAndConfirmDonation(container));
 
     await waitForDom(() => {
-      expect(container.querySelector(".map-error-overlay")?.textContent).toContain("unvollst");
+      expect(container.querySelector(".workspace-error")?.textContent).toContain("unvollst");
       expect(container.querySelector(".danger")).not.toBeNull();
     });
     const datasetIdentifier = `solid-tours-activity-${scenarioRunId}`;
@@ -4372,7 +4370,7 @@ describe("City Tours app shells", () => {
       )
     );
     await waitForDom(() => expect(container.querySelector(".publish")).not.toBeNull());
-    await act(async () => container.querySelector<HTMLButtonElement>(".publish")!.click());
+    await act(async () => requestAndConfirmDonation(container));
 
     await waitForDom(() => expect(container.querySelector(".danger")).not.toBeNull());
     expect(podNetworkMocks.writePublishedMarker).toHaveBeenCalledOnce();
@@ -4431,7 +4429,7 @@ describe("City Tours app shells", () => {
 
     await waitForDom(() => {
       expect(container.querySelector<HTMLButtonElement>(".publish")?.textContent).toBe(
-        "Gesundheitsdatenspende freigeben"
+        "Spende vorbereiten"
       );
     });
 
@@ -4441,7 +4439,7 @@ describe("City Tours app shells", () => {
     expect(container.querySelector(".health-donation-actions > .publish")).not.toBeNull();
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>(".publish")!.click();
+      requestAndConfirmDonation(container);
     });
 
     await waitForDom(() => {
@@ -4502,7 +4500,7 @@ describe("City Tours app shells", () => {
 
     await waitForDom(() => {
       expect(container.querySelector(".health-donation-actions")?.textContent).toContain(
-        "Gesundheitsdatenspende zurücksetzen"
+        "Spende widerrufen"
       );
     });
     expect(container.querySelector(".notice")).toBeNull();
@@ -4561,12 +4559,12 @@ describe("City Tours app shells", () => {
 
     await waitForDom(() => {
       expect(container.querySelector<HTMLButtonElement>(".danger")?.textContent).toBe(
-        "Gesundheitsdatenspende zurücksetzen"
+        "Spende widerrufen"
       );
     });
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>(".danger")!.click();
+      requestAndConfirmDonation(container, ".health-donation-actions .danger");
     });
 
     await waitForDom(() => {
@@ -4711,7 +4709,7 @@ describe("City Tours app shells", () => {
       )
     );
     await waitForDom(() => expect(container.querySelector(".danger")).not.toBeNull());
-    await act(async () => container.querySelector<HTMLButtonElement>(".danger")!.click());
+    await act(async () => requestAndConfirmDonation(container, ".health-donation-actions .danger"));
 
     await waitForDom(() => expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenCalledTimes(3));
     expect(podNetworkMocks.saveStateIfUnchanged).toHaveBeenLastCalledWith(

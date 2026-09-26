@@ -35,6 +35,45 @@ npm run build
 npm start
 ```
 
+## Tour workspace and consent
+
+The workspace separates **My tours**, **Discover**, **Activities** and **Sharing**.
+Narrow embeds provide a list/map switch; the map keeps its full available width.
+Routes can be searched and sorted, and catalog discovery supports name/publisher
+and distance filters. A catalog preview stays open until explicitly closed.
+Adoption creates a private, editable copy of the name and geometry with its source
+reference. It does not subscribe to source updates or import GPX timing.
+
+The untouched initial draft allows import and catalog adoption immediately.
+Replacing a changed draft asks whether to save, discard or cancel. Browser reloads
+and link navigation warn while an editor is dirty. Only explicit saving can update
+an already public route. Map drawing keeps the viewport stable, marks endpoints
+and supports undo after clearing. With the map focused, arrow keys pan and Enter
+adds a point at its center; **Show route** explicitly fits the view.
+
+Initial setup creates only the private app space. New private-only acknowledgements
+use onboarding schema **3**, without public publishing or registry fields. Existing
+schema-2 records remain valid. Public sharing has a separate confirmation and
+revalidates profile, registry and inbox readiness; the existing public consent
+record remains schema 2 for compatibility. Private consent never enables publishing.
+The current Catalog SDK also needs a configured public registry for discovery;
+the Discover panel explains this if setup is missing.
+
+Recording an activity asks for its date and walking/cycling type in one modal.
+Duration from GPX is distinguished from estimates; the derivation assumptions are
+shown before saving. Donation preparation previews the fixed set of completed
+activities and explains public metadata and the separate access request. The
+Sharing panel reports only local publication state and how many newer activities
+are excluded. It links to the Manager at `/notifications`; it does not infer
+worker access or successful processing. Revocation cannot recall downloaded copies.
+
+The shared modal uses native `showModal()` for a document-wide inert background,
+focus containment, Escape and focus restoration, including in the Manager embed.
+References: [HTML dialog](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal),
+[WAI modal dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/),
+[React effect cleanup](https://react.dev/reference/react/useEffect),
+[Leaflet view methods](https://leafletjs.com/reference.html#map-fitbounds).
+
 The standalone application is served below `/city-tours/` and starts with its own Solid provider
 login. After authentication it renders a map-first workspace with a City Tours header and footer.
 The package also exports
@@ -56,7 +95,7 @@ not silently store that user's data in the browser.
   `solid-tours/` in their resolved Pod; existing Pod state is loaded unchanged. The standalone
   application requires login; an embedding host may still render a guest-local mode when it does
   not provide an identity.
-- `Tour gemacht` requires an explicit walking or cycling choice, previews the locally calculated
+- `Als absolviert eintragen` requires an explicit walking or cycling choice, previews the locally calculated
   values for that choice and then stores an activity in the active local or Solid-Pod storage
   mode. No GPS or Health App resource is read or written.
 - The five generic interests are created once per authenticated user in the owner-only
@@ -92,7 +131,7 @@ Three real Wuppertal GeoJSON tracks for testing the importer are available in
 their source, `© OpenStreetMap contributors` attribution and ODbL 1.0 license are documented in
 that directory and embedded in every file.
 
-The Catalog SDK dependency is pinned to `0.8.66` for fail-closed restricted publication and
+The Catalog SDK dependency is pinned to `0.8.77` for fail-closed restricted publication and
 public route-template discovery.
 Local stack development can link the sibling Catalog `dist` package directly without changing the
 registry-based lockfile.

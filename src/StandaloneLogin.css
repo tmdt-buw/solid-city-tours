@@ -39,39 +39,7 @@
   padding: 16px 0;
 }
 
-@media (min-width: 900px) {
-  .city-tours-login {
-    --city-tours-login-scale: .7;
-    --city-tours-login-layout-width: calc(100vw / var(--city-tours-login-scale));
-    --city-tours-login-layout-height: calc(100vh / var(--city-tours-login-scale));
-    --city-tours-login-layout-height: calc(100dvh / var(--city-tours-login-scale));
-    width: var(--city-tours-login-layout-width);
-    min-height: var(--city-tours-login-layout-height);
-    zoom: var(--city-tours-login-scale);
-  }
 
-  .browser-safari .city-tours-login {
-    --city-tours-login-layout-width: 100vw;
-    --city-tours-login-layout-height: 100vh;
-    --city-tours-login-layout-height: 100dvh;
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    min-height: 100vh;
-    min-height: 100dvh;
-    padding: 0 20px;
-    overflow-y: auto;
-    scrollbar-color: #7895b8 #e8eef6;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
-    zoom: normal;
-  }
-
-  .browser-safari .city-tours-login::-webkit-scrollbar { width: 9px; height: 9px; }
-  .browser-safari .city-tours-login::-webkit-scrollbar-track { border-radius: 999px; background: #e8eef6; }
-  .browser-safari .city-tours-login::-webkit-scrollbar-thumb { border: 2px solid #e8eef6; border-radius: 999px; background: #7895b8; }
-  .browser-safari .city-tours-login::-webkit-scrollbar-thumb:hover { background: #466b98; }
-}
 
 .city-tours-login .city-tours-login__language {
   display: flex;
@@ -462,3 +430,9 @@
 @media (prefers-reduced-motion: reduce) {
   .city-tours-login .city-tours-login__provider { transition: none; }
 }
+
+.city-tours-login .city-tours-login__intro { max-width: 44rem; margin: 12px auto 24px; font-size: 1.05rem; line-height: 1.6; text-align: center; }
+.city-tours-login .city-tours-login__custom summary { min-height: 44px; padding: 12px 0; font-weight: 700; cursor: pointer; }
+.city-tours-login .city-tours-login__shell { max-width: 760px; }
+.city-tours-login { padding: 24px 20px; overflow-y: auto; height: 100dvh; }
+.city-tours-login .city-tours-login__stage { min-height: 0; }

@@ -109,9 +109,11 @@ export default function StandaloneLogin({
             </div>
           </header>
 
+          <p className="city-tours-login__intro">{language === "de" ? "Plane Touren in Wuppertal. Speichere sie privat und entscheide selbst, was du teilst." : "Plan tours in Wuppertal. Save them privately and choose what you share."}</p>
           <LoginParticleCloud label="City Tours" />
 
           <form className="city-tours-login__card" onSubmit={submit} noValidate>
+          <p>{language === "de" ? "Melde dich mit deinem Solid-Konto an. Dein Pod ist dein persönlicher Datenspeicher; du bestimmst, wer Zugriff erhält." : "Sign in with your Solid account. Your Pod is your personal data store; you choose who has access."}</p>
           <fieldset className="city-tours-login__fieldset" disabled={busy}>
             <legend className="city-tours-login__legend">{translate(language, "suggestedProviders")}</legend>
             <div className="city-tours-login__providers">
@@ -139,7 +141,8 @@ export default function StandaloneLogin({
             </div>
           </fieldset>
 
-          <div className="city-tours-login__custom">
+          <details className="city-tours-login__custom" open={customValue ? true : undefined}>
+            <summary>{language === "de" ? "Anderer Pod-Anbieter" : "Another Pod provider"}</summary>
             <label className="city-tours-login__label" htmlFor={customInputId}>
               {translate(language, "customIssuer")}
             </label>
@@ -177,7 +180,7 @@ export default function StandaloneLogin({
                 {translate(language, "invalidIssuer")}
               </p>
             )}
-          </div>
+          </details>
 
           {visibleError && (
             <div className="city-tours-login__error" role="alert">

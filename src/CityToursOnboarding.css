@@ -80,3 +80,10 @@
   .tours-onboarding__actions > div { margin-left: 0; }
   .tours-onboarding__actions button { flex: 1; }
 }
+
+.tours-onboarding__destination { display: block; }
+.tours-onboarding__destination summary { cursor: pointer; min-height: 28px; font-weight: 700; }
+.tours-onboarding__destination code { display: block; margin-top: 8px; }
+.tours-onboarding__check-copy small, .tours-onboarding__actions p { font-size: .875rem; line-height: 1.55; }
+.tours-onboarding__actions > div { flex-wrap: wrap; }
+.tours-onboarding__actions a { display: inline-flex; align-items: center; min-height: 44px; }

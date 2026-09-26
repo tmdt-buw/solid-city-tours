@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import L, {
-  type LatLngExpression,
-  type LeafletMouseEvent,
-} from "leaflet";
-import "leaflet/dist/leaflet.css";
+import TourMap from "./TourMap";
+import Modal from "./Modal";
+import RouteCatalog from "./RouteCatalog";
 import "./App.css";
 
 import FontAwesomeIcon from "./FontAwesomeIcon";
@@ -20,6 +18,7 @@ import {
   updateRouteTemplateCatalogEntry,
   saveCatalogProfileMetadata,
   type CatalogProfileMetadata,
+  type CatalogRouteDiscoveryReport,
   type PublicRegistryOption,
   removeCatalogEntry,
 } from "./catalog";
@@ -98,12 +97,13 @@ import {
   type CatalogedRoute,
 } from "./routeTemplates";
 import { validateActiveRun } from "./stateValidation";
-import { initializeOnce } from "./mapLifecycle";
 import StandaloneLogin from "./StandaloneLogin";
 import LanguageToggle from "./LanguageToggle";
 import CityToursOnboarding from "./CityToursOnboarding";
 import {
   completeOnboardingRecord,
+  completePrivateOnboardingRecord,
+  privateOnboardingCompleteFor,
   onboardingCompleteFor,
   type CityToursOnboardingRecord,
 } from "./appOnboarding";
@@ -127,9 +127,17 @@ import {
 
 const AUTH_BRIDGE_KEY = "__SOLID_DATASPACE_AUTH__";
 const DEFAULT_ISSUER = "https://solid-community-server.tmdt.info";
-const WUPPERTAL: LatLngExpression = [51.2562, 7.1508];
 const RECOVERY_STATE_CAS_ATTEMPTS = 3;
 const CATALOG_PUBLICATION_LEASE_MS = 15 * 60 * 1000;
+type PendingAction =
+  | { kind: "import"; file: File }
+  | { kind: "adopt"; route: CatalogedRoute }
+  | { kind: "select" | "duplicate"; id: string }
+  | { kind: "new" }
+  | { kind: "logout" }
+  | { kind: "public-setup" }
+  | { kind: "leave"; href: string };
+type WorkspaceSection = "tours" | "discover" | "activities" | "sharing";
 type BridgeState = { isLoggedIn: boolean; webId: string | null };
 type DeleteConfirmation =
   | { kind: "draft"; item: TourDraft }
@@ -298,175 +306,7 @@ const samePendingUpdate = (
   publication.pendingUpdate.leaseId === leaseId &&
   sameStoredDraft(publication.pendingUpdate.draft, draft);
 
-const position = ([longitude, latitude]: Coordinate): LatLngExpression => [latitude, longitude];
-
-function TourMap({
-  geometry,
-  savedRoutes,
-  catalogPreview,
-  editable,
-  onPoint,
-  onSelectRoute,
-  language,
-}: {
-  geometry: MultiLineCoordinates;
-  savedRoutes: TourDraft[];
-  catalogPreview: CatalogedRoute | null;
-  editable: boolean;
-  onPoint: (point: Coordinate) => void;
-  onSelectRoute: (draftId: string) => void;
-  language: ToursLanguage;
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const overlayRef = useRef<L.LayerGroup | null>(null);
-  const zoomControlRef = useRef<L.Control.Zoom | null>(null);
-  const zoomControlLanguageRef = useRef<ToursLanguage | null>(null);
-  const languageRef = useRef(language);
-  languageRef.current = language;
-  const onPointRef = useRef(onPoint);
-  onPointRef.current = onPoint;
-  const onSelectRouteRef = useRef(onSelectRoute);
-  onSelectRouteRef.current = onSelectRoute;
-  const editableRef = useRef(editable);
-  editableRef.current = editable;
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const map = initializeOnce(mapRef.current, () =>
-      L.map(container, { scrollWheelZoom: true, zoomControl: false }).setView(WUPPERTAL, 13)
-    );
-    mapRef.current = map;
-    overlayRef.current = L.layerGroup().addTo(map);
-    zoomControlRef.current = L.control.zoom({
-      position: "topleft",
-      zoomInTitle: translate(languageRef.current, "zoomIn"),
-      zoomOutTitle: translate(languageRef.current, "zoomOut"),
-    }).addTo(map);
-    zoomControlLanguageRef.current = languageRef.current;
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
-
-    const handleClick = (event: LeafletMouseEvent) => {
-      if (editableRef.current) {
-        onPointRef.current([event.latlng.lng, event.latlng.lat]);
-      }
-    };
-    map.on("click", handleClick);
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(() => map.invalidateSize({ pan: false }));
-    resizeObserver?.observe(container);
-
-    return () => {
-      resizeObserver?.disconnect();
-      map.off("click", handleClick);
-      map.remove();
-      if (mapRef.current === map) mapRef.current = null;
-      overlayRef.current = null;
-      zoomControlRef.current = null;
-      zoomControlLanguageRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || zoomControlLanguageRef.current === language) return;
-    zoomControlRef.current?.remove();
-    zoomControlRef.current = L.control.zoom({
-      position: "topleft",
-      zoomInTitle: translate(language, "zoomIn"),
-      zoomOutTitle: translate(language, "zoomOut"),
-    }).addTo(map);
-    zoomControlLanguageRef.current = language;
-  }, [language]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    const overlay = overlayRef.current;
-    const container = containerRef.current;
-    if (!map || !overlay || !container) return;
-
-    overlay.clearLayers();
-    savedRoutes.forEach((savedRoute) => {
-      savedRoute.geometry
-        .filter((line) => line.length >= 2)
-        .forEach((line) => {
-          L.polyline(line.map(position), {
-            color: "#174ea6",
-            opacity: .72,
-            weight: 5,
-            smoothFactor: 1.5,
-            lineCap: "round",
-            lineJoin: "round",
-            bubblingMouseEvents: false,
-          })
-            .on("click", () => onSelectRouteRef.current(savedRoute.id))
-            .addTo(overlay);
-        });
-    });
-    geometry
-      .filter((line) => line.length >= 2)
-      .forEach((line) => {
-        L.polyline(line.map(position), {
-          color: "#d97706",
-          opacity: .96,
-          weight: 7,
-          smoothFactor: 1.5,
-          lineCap: "round",
-          lineJoin: "round",
-          interactive: true,
-          bubblingMouseEvents: false,
-        }).addTo(overlay);
-      });
-
-    if (catalogPreview) {
-      const tooltip = document.createElement("div");
-      tooltip.className = "catalog-route-tooltip";
-      const name = document.createElement("strong");
-      name.textContent = catalogPreview.name;
-      const publisher = document.createElement("span");
-      publisher.textContent = `${translate(language, "publishedBy")}: ${catalogPreview.publisher}`;
-      const distance = document.createElement("span");
-      distance.textContent = `${translate(language, "distance")}: ${distanceLabel(
-        catalogPreview.geometry,
-        language
-      )}`;
-      tooltip.append(name, publisher, distance);
-      catalogPreview.geometry
-        .filter((line) => line.length >= 2)
-        .forEach((line) => {
-          L.polyline(line.map(position), {
-            color: "#00a6a6",
-            opacity: 1,
-            weight: 8,
-            dashArray: "12 8",
-            smoothFactor: 1.5,
-            lineCap: "round",
-            lineJoin: "round",
-            bubblingMouseEvents: false,
-          })
-            .bindTooltip(tooltip.cloneNode(true) as HTMLElement, {
-              sticky: true,
-              className: "catalog-route-leaflet-tooltip",
-            })
-            .addTo(overlay);
-        });
-    }
-
-    const points = catalogPreview?.geometry.flat() || geometry.flat();
-    if (points.length >= 2) {
-      map.fitBounds(L.latLngBounds(points.map(position)), { padding: [24, 24] });
-    }
-  }, [catalogPreview, geometry, language, savedRoutes]);
-
-  return <div ref={containerRef} className="tour-map" />;
-}
+const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 const numberLocale = (language: ToursLanguage) => (language === "de" ? "de-DE" : "en-US");
 
@@ -496,19 +336,7 @@ function CompletionLoadingOverlay({
   const icon = activityType === "cycling" ? "bicycle" : "person-walking";
 
   return (
-    <div
-      className="modal-backdrop completion-loading-backdrop"
-      role="presentation"
-      data-testid="completion-loading-overlay"
-    >
-      <section
-        className={`completion-loading-card completion-loading-card--${activityType}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="completion-loading-title"
-        aria-busy="true"
-        data-activity-type={activityType}
-      >
+    <Modal labelledBy="completion-loading-title" className={`completion-loading-card completion-loading-card--${activityType}`} busy onClose={() => {}} testId="completion-loading-overlay" activityType={activityType}>
         <div className="completion-journey" aria-hidden="true">
           <svg viewBox="0 0 400 100" preserveAspectRatio="none">
             <path
@@ -547,8 +375,7 @@ function CompletionLoadingOverlay({
         <div className="completion-progress-rail" role="progressbar" aria-label={label}>
           <span />
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }
 
@@ -622,6 +449,7 @@ export default function App({
   const [onboardingRecord, setOnboardingRecord] =
     useState<CityToursOnboardingRecord | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
+  const [publicSetupRequired, setPublicSetupRequired] = useState(false);
   const [onboardingInfrastructureReady, setOnboardingInfrastructureReady] =
     useState(false);
   const [onboardingProfileReady, setOnboardingProfileReady] = useState(false);
@@ -652,6 +480,21 @@ export default function App({
   const [catalogedRoutes, setCatalogedRoutes] = useState<CatalogedRoute[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogPreviewId, setCatalogPreviewId] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogReport, setCatalogReport] = useState<CatalogRouteDiscoveryReport | null>(null);
+  const catalogRequestRevision = useRef(0);
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("tours");
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
+  const [tourQuery, setTourQuery] = useState("");
+  const [tourSort, setTourSort] = useState("recent");
+  const [fitRequest, setFitRequest] = useState(0);
+  const [isDrawing, setIsDrawing] = useState(true);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [continuedAction, setContinuedAction] = useState<PendingAction | null>(null);
+  const [donationConfirmation, setDonationConfirmation] = useState<"publish" | "reset" | null>(null);
+  const [geometryHistory, setGeometryHistory] = useState<TourDraft[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { setGeometryHistory([]); setIsDrawing(true); }, [draft.id, isEditing]);
   const availableCatalogRoutes = useMemo(
     () =>
       availableCatalogedRoutes(catalogedRoutes, state.drafts, {
@@ -710,7 +553,14 @@ export default function App({
     setCatalogConfirmation(null);
     setCatalogedRoutes([]);
     setCatalogPreviewId(null);
+    setCatalogError(null);
+    setCatalogReport(null);
+    setPendingAction(null);
+    setContinuedAction(null);
+    setDonationConfirmation(null);
+    catalogRequestRevision.current += 1;
     setOnboardingRecord(null);
+    setPublicSetupRequired(false);
     setOnboardingRequired(false);
     setOnboardingInfrastructureReady(false);
     setOnboardingProfileReady(false);
@@ -744,7 +594,15 @@ export default function App({
     setCatalogConfirmation(null);
     setCatalogedRoutes([]);
     setCatalogPreviewId(null);
+    setCatalogError(null);
+    setCatalogReport(null);
+    setCatalogLoading(false);
+    setPendingAction(null);
+    setContinuedAction(null);
+    setDonationConfirmation(null);
+    catalogRequestRevision.current += 1;
     setOnboardingRecord(null);
+    setPublicSetupRequired(false);
     setOnboardingRequired(false);
     setOnboardingInfrastructureReady(false);
     setOnboardingProfileReady(false);
@@ -781,7 +639,7 @@ export default function App({
       if (revision !== authRevision.current) return;
       setOnboardingRecord(record);
       const onboardingContext = embedded ? "embedded" : "standalone";
-      const [catalogReadiness, inboxReadiness, profileMetadata] = await Promise.all([
+      const [catalogResult, inboxResult, profileResult] = await Promise.allSettled([
         loadRouteCatalogReadiness({ podRoot: root, webId: auth.webId, fetcher }),
         getCityToursInboxReadiness({
           podRoot: root,
@@ -791,6 +649,9 @@ export default function App({
         loadCatalogProfileMetadata(auth.webId, fetcher),
       ]);
       if (revision !== authRevision.current) return;
+      const catalogReadiness = catalogResult.status === "fulfilled" ? catalogResult.value : { catalogConfigured: false, publicRegistries: [] };
+      const inboxReadiness = inboxResult.status === "fulfilled" ? inboxResult.value : { configured: false };
+      const profileMetadata = profileResult.status === "fulfilled" ? profileResult.value : { publisher: "", contactEmail: "" };
       const configuredRegistries = catalogReadiness.publicRegistries;
       const registryOptions = loadPublicRegistryOptions();
       const knownRegistryUrls = new Set(registryOptions.map((option) => option.url));
@@ -804,11 +665,6 @@ export default function App({
       setOnboardingRegistryOptions([...registryOptions, ...configuredOptions]);
       setOnboardingPublicRegistries(configuredRegistries);
       setOnboardingProfileMetadata(profileMetadata);
-      const catalogReadyForRecord = Boolean(
-        record?.publicRegistryUrl &&
-          catalogReadiness.catalogConfigured &&
-          configuredRegistries.includes(record.publicRegistryUrl)
-      );
       const infrastructureReady = Boolean(
         catalogReadiness.catalogConfigured &&
           configuredRegistries.length > 0 &&
@@ -817,26 +673,10 @@ export default function App({
       const profileReady = Boolean(
         profileMetadata.publisher && profileMetadata.contactEmail
       );
-      setOnboardingInfrastructureReady(
-        embedded ? infrastructureReady : true
-      );
-      setOnboardingProfileReady(embedded ? profileReady : true);
-      if (
-        !onboardingCompleteFor(record, onboardingContext) ||
-        !catalogReadyForRecord ||
-        !inboxReadiness.configured ||
-        !profileReady
-      ) {
+      setOnboardingInfrastructureReady(infrastructureReady);
+      setOnboardingProfileReady(profileReady);
+      if (!privateOnboardingCompleteFor(record, onboardingContext)) {
         setOnboardingRequired(true);
-        if (embedded && !profileReady) {
-          setError(
-            "Vervollständige zuerst deinen Publisher-Namen und deine Kontakt-E-Mail im Profile Manager oder im allgemeinen Dataspace-Onboarding."
-          );
-        } else if (embedded && !infrastructureReady) {
-          setError(
-            "Schließe zuerst das allgemeine Dataspace-Onboarding ab, damit eine öffentliche Research-Registry und eine öffentliche Append-only-Solid-Inbox eingerichtet sind."
-          );
-        }
         return;
       }
       await ensureStorage(root, auth.webId, fetcher);
@@ -1003,7 +843,9 @@ export default function App({
       return;
     }
     const catalogAuthRevision = authRevision.current;
+    const requestRevision = ++catalogRequestRevision.current;
     setCatalogLoading(true);
+    setCatalogError(null);
     try {
       const routes = await discoverCatalogedRoutes({
         podRoot,
@@ -1011,17 +853,16 @@ export default function App({
         fetcher: solidFetch,
         anonymousFetch: (input, init) => globalThis.fetch(input, init),
       });
-      if (catalogAuthRevision === authRevision.current) {
+      if (catalogAuthRevision === authRevision.current && requestRevision === catalogRequestRevision.current) {
         setCatalogedRoutes(routes);
-        const report = getCatalogedRouteDiscoveryReport(routes);
-        if (report && (report.failures.length > 0 || report.truncatedCount > 0)) {
-          setError(
-            "Einige Einträge des öffentlichen Routenkatalogs konnten nicht sicher geladen werden."
-          );
-        }
+        setCatalogReport(getCatalogedRouteDiscoveryReport(routes));
+      }
+    } catch (reason) {
+      if (catalogAuthRevision === authRevision.current && requestRevision === catalogRequestRevision.current) {
+        setCatalogError(reason instanceof Error ? reason.message : translate(languageRef.current, "catalogLoadFailed"));
       }
     } finally {
-      if (catalogAuthRevision === authRevision.current) setCatalogLoading(false);
+      if (catalogAuthRevision === authRevision.current && requestRevision === catalogRequestRevision.current) setCatalogLoading(false);
     }
   }, [podConnected, podRoot, solidFetch, webId]);
 
@@ -1063,6 +904,20 @@ export default function App({
       assertCurrentAuthContext();
       if (!webId || !solidFetch || !podRoot) {
         throw new Error("Der private Solid Pod ist für die Einrichtung nicht verfügbar.");
+      }
+      if (!publicSetupRequired) {
+        const privateRecord = completePrivateOnboardingRecord(onboardingRecord, embedded ? "embedded" : "standalone");
+        await ensureStorage(podRoot, webId, solidFetch);
+        assertCurrentAuthContext();
+        await saveCityToursOnboarding(podRoot, privateRecord, webId, solidFetch);
+        assertCurrentAuthContext();
+        const stored = await loadState(podRoot, solidFetch);
+        assertCurrentAuthContext();
+        podAccessActive.current = true;
+        setOnboardingRecord(privateRecord);
+        setOnboardingRequired(false);
+        activateState(stored);
+        return;
       }
       const context = embedded ? "embedded" : "standalone";
       let selectedRegistry: string;
@@ -1141,15 +996,14 @@ export default function App({
       assertCurrentAuthContext();
       await saveCityToursOnboarding(podRoot, record, webId, solidFetch);
       assertCurrentAuthContext();
-      const stored = await loadState(podRoot, solidFetch);
-      assertCurrentAuthContext();
-      podAccessActive.current = true;
+      // Public setup returns to the existing editor without replacing unsaved work.
+      setPublicSetupRequired(false);
       setOnboardingRecord(record);
       setOnboardingRequired(false);
       setOnboardingInfrastructureReady(true);
       setOnboardingProfileReady(true);
       setOnboardingPublicRegistries(publicRegistries);
-      activateState(stored);
+      void refreshCatalogedRoutes();
     });
 
   const persistStateForCurrentMode = async (
@@ -1180,7 +1034,8 @@ export default function App({
   };
 
   const addPoint = (point: Coordinate) => {
-    if (!isEditing) return;
+    if (!isEditing || !isDrawing || busy) return;
+    setGeometryHistory((history) => [...history.slice(-99), cloneDraft(draft)]);
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       const lines = current.geometry.length ? current.geometry.map((line) => [...line]) : [[]];
@@ -1197,26 +1052,17 @@ export default function App({
   };
 
   const undoPoint = () => {
-    if (!isEditing) return;
-    setDraft((current) => {
-      generatedDefaultDraftIds.current.delete(current.id);
-      const lines = current.geometry.map((line) => [...line]);
-      while (lines.length > 0 && lines.at(-1)?.length === 0) lines.pop();
-      lines.at(-1)?.pop();
-      while (lines.length > 1 && lines.at(-1)?.length === 0) lines.pop();
-      if (lines.length === 0) lines.push([]);
-      return {
-        ...current,
-        geometry: lines,
-        durationMinutes: undefined,
-        durationSource: undefined,
-        updatedAt: new Date().toISOString(),
-      };
-    });
+    if (!isEditing || busy || !geometryHistory.length) return;
+    const previous = geometryHistory.at(-1)!;
+    setDraft((current) => ({ ...current, geometry: previous.geometry,
+      routeSource: previous.routeSource, durationMinutes: previous.durationMinutes,
+      durationSource: previous.durationSource, updatedAt: new Date().toISOString() }));
+    setGeometryHistory((history) => history.slice(0, -1));
   };
 
   const clearRoute = () => {
-    if (!isEditing) return;
+    if (!isEditing || busy) return;
+    setGeometryHistory((history) => [...history.slice(-99), cloneDraft(draft)]);
     setDraft((current) => {
       generatedDefaultDraftIds.current.delete(current.id);
       return {
@@ -1229,10 +1075,10 @@ export default function App({
     });
   };
 
-  const importFile = (file: File | undefined) => {
+  const importFile = (file: File | undefined, discardConfirmed = false) => {
     if (!file) return;
-    if (editorHasPendingChanges()) {
-      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+    if (!discardConfirmed && editorHasPendingChanges()) {
+      setPendingAction({ kind: "import", file });
       return;
     }
     void mutate(async () => {
@@ -1265,6 +1111,7 @@ export default function App({
     if (!podConnected || !podRoot || !solidFetch || !webId) {
       throw new Error("Der private Solid Pod ist für diese Aktion nicht verfügbar.");
     }
+    if (!publicSharingReady) throw new Error(t("publicSetup"));
     const resumingUpdate = renderedPublication.phase === "updating";
     if (!resumingUpdate && renderedPublication.phase !== "published") {
       throw new Error(
@@ -1813,15 +1660,7 @@ export default function App({
     setError(null);
     try {
       if (!draft.name.trim()) throw new Error("Gib der Tour einen Namen.");
-      let normalizedCompletedDate: string;
-      try {
-        normalizedCompletedDate = parseDate(completedDateInput, language);
-      } catch (dateError) {
-        const message =
-          dateError instanceof Error ? dateError.message : "Bitte gib ein gültiges Datum ein.";
-        setCompletedDateError(message);
-        throw dateError;
-      }
+      const normalizedCompletedDate = localDate(new Date());
       setCompletedDateInput(formatDate(normalizedCompletedDate, language));
       setCompletedDateError(null);
       const storedDraft = state.drafts.find((item) => item.id === draft.id);
@@ -1861,6 +1700,7 @@ export default function App({
 
   const publishActivities = async (baseState: ToursState): Promise<ToursState> => {
       assertCurrentAuthContext();
+      if (!publicSharingReady) throw new Error(t("publicSetup"));
       if (!podConnected || !podRoot || !solidFetch || !webId) {
         throw new Error("Restricted Publish ist für dieses Konto nicht verfügbar.");
       }
@@ -2236,7 +2076,19 @@ export default function App({
       await resetActiveRun(validateActiveRun(podRoot, state.activeRun));
     });
 
+  const publicSharingReady = onboardingCompleteFor(onboardingRecord, embedded ? "embedded" : "standalone") &&
+    onboardingInfrastructureReady && onboardingProfileReady && Boolean(onboardingRecord?.publicRegistryUrl && onboardingPublicRegistries.includes(onboardingRecord.publicRegistryUrl));
+  const requestPublicSetup = () => {
+    if (editorHasPendingChanges()) { setPendingAction({ kind: "public-setup" }); return; }
+    setPublicSetupRequired(true);
+  };
+  const requestDonation = () => {
+    if (!publicSharingReady) { requestPublicSetup(); return; }
+    setDonationConfirmation("publish");
+  };
+
   const requestCatalogIndex = (drafts: TourDraft[]) => {
+    if (!publicSharingReady) { requestPublicSetup(); return; }
     const unpublished = drafts.filter(
       (candidate) =>
         isDraftEligibleForCatalogPublication(candidate) &&
@@ -2751,9 +2603,9 @@ export default function App({
       }
     });
 
-  const adoptRouteFromCatalog = (route: CatalogedRoute) => {
-    if (editorHasPendingChanges()) {
-      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+  const adoptRouteFromCatalog = (route: CatalogedRoute, discardConfirmed = false) => {
+    if (!discardConfirmed && editorHasPendingChanges()) {
+      setPendingAction({ kind: "adopt", route });
       return;
     }
     mutate(async () => {
@@ -2765,6 +2617,8 @@ export default function App({
       }
       const adopted = adoptCatalogedRoute(route);
       await persistDraft(adopted);
+      setIsEditing(false);
+      setActiveSection("tours");
       setCatalogPreviewId(null);
     });
   };
@@ -2783,16 +2637,19 @@ export default function App({
   const editorHasPendingChanges = (): boolean => {
     if (!isEditing) return false;
     const storedDraft = state.drafts.find((item) => item.id === draft.id);
-    if (!storedDraft) return true;
+    if (!storedDraft) return !generatedDefaultDraftIds.current.has(draft.id);
     return !sameDraftContent(storedDraft, draft);
   };
 
-  const selectDraft = (selected: TourDraft) => {
-    if (selected.id === draft.id) return;
-    if (editorHasPendingChanges()) {
-      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+  const selectDraft = (selected: TourDraft, discardConfirmed = false) => {
+    if (busy) return;
+    if (selected.id === draft.id) { setActiveSection("tours"); return; }
+    if (!discardConfirmed && editorHasPendingChanges()) {
+      setPendingAction({ kind: "select", id: selected.id });
       return;
     }
+    setActiveSection("tours");
+    setCatalogPreviewId(null);
     setDraft(cloneDraft(selected));
     setIsEditing(false);
     setError(null);
@@ -2807,6 +2664,7 @@ export default function App({
     const publication = state.catalogPublications.find(
       (candidate) => candidate.sourceDraftId === draft.id
     );
+    if (publication && !publicSharingReady) { requestPublicSetup(); return; }
     if (publication?.phase === "updating") {
       if (!catalogPhaseLeaseExpired(publication)) {
         setError("Die Routenvorlage wird gerade in einem anderen Tab aktualisiert.");
@@ -2846,9 +2704,10 @@ export default function App({
     setError(null);
   };
 
-  const beginNewDraft = () => {
-    if (editorHasPendingChanges()) {
-      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+  const beginNewDraft = (discardConfirmed = false) => {
+    if (busy) return;
+    if (!discardConfirmed && editorHasPendingChanges()) {
+      setPendingAction({ kind: "new" });
       return;
     }
     const freshDraft = createGeneratedDraft();
@@ -2873,9 +2732,9 @@ export default function App({
     setError(null);
   };
 
-  const duplicateDraft = (source: TourDraft) => {
-    if (editorHasPendingChanges()) {
-      setError("Speichere oder verwirf zuerst die aktuellen Änderungen.");
+  const duplicateDraft = (source: TourDraft, discardConfirmed = false) => {
+    if (!discardConfirmed && editorHasPendingChanges()) {
+      setPendingAction({ kind: "duplicate", id: source.id });
       return;
     }
     mutate(async () => {
@@ -2890,6 +2749,7 @@ export default function App({
         updatedAt: timestamp,
       };
       await persistDraft(copy);
+      setIsEditing(false);
     });
   };
 
@@ -3348,7 +3208,8 @@ export default function App({
     }
   };
 
-  const logout = async () => {
+  const logout = async (discardConfirmed = false) => {
+    if (!discardConfirmed && editorHasPendingChanges()) { setPendingAction({ kind: "logout" }); return; }
     setBusy(true);
     setError(null);
     try {
@@ -3363,6 +3224,42 @@ export default function App({
       setBusy(false);
     }
   };
+
+  const hasPendingChanges = editorHasPendingChanges();
+  useEffect(() => {
+    if (!hasPendingChanges) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    // Register only while dirty; browsers control the native warning text.
+    // https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeunload_event
+    window.addEventListener("beforeunload", warn);
+    const followLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download") || anchor.href === window.location.href) return;
+      event.preventDefault(); event.stopPropagation();
+      setPendingAction({ kind: "leave", href: anchor.href });
+    };
+    document.addEventListener("click", followLink, true);
+    return () => { window.removeEventListener("beforeunload", warn); document.removeEventListener("click", followLink, true); };
+  }, [hasPendingChanges]);
+  useEffect(() => {
+    if (!continuedAction || busy) return;
+    setContinuedAction(null);
+    const intent = continuedAction;
+    if (intent.kind === "import") importFile(intent.file, true);
+    else if (intent.kind === "adopt") adoptRouteFromCatalog(intent.route, true);
+    else if (intent.kind === "new") beginNewDraft(true);
+    else if (intent.kind === "logout") { void logout(true); }
+    else if (intent.kind === "public-setup") { cancelDraftEditing(); setPublicSetupRequired(true); }
+    else if (intent.kind === "leave") { window.location.assign(intent.href); }
+    else {
+      const selected = state.drafts.find((item) => item.id === intent.id);
+      if (selected) {
+        if (intent.kind === "select") selectDraft(selected, true);
+        else duplicateDraft(selected, true);
+      }
+    }
+  }, [continuedAction, busy]);
 
   if (loading) {
     return (
@@ -3415,7 +3312,7 @@ export default function App({
     );
   }
 
-  if (onboardingRequired && isAuthenticated && podRoot) {
+  if ((onboardingRequired || publicSetupRequired) && isAuthenticated && podRoot) {
     return (
       <div
         className={`city-tours-app city-tours-app--onboarding ${
@@ -3424,6 +3321,9 @@ export default function App({
         lang={language}
       >
         <CityToursOnboarding
+          key={publicSetupRequired ? "publishing" : "private"}
+          mode={publicSetupRequired ? "publishing" : "private"}
+          onCancel={publicSetupRequired ? () => { setPublicSetupRequired(false); setError(null); } : undefined}
           context={embedded ? "embedded" : "standalone"}
           language={language}
           podRoot={podRoot}
@@ -3447,6 +3347,8 @@ export default function App({
   }
 
   const mapRoutes = state.drafts.filter((item) => item.id !== draft.id);
+  const visibleDrafts = state.drafts.filter((item) => item.name.toLocaleLowerCase(language).includes(tourQuery.trim().toLocaleLowerCase(language)))
+    .sort((a, b) => tourSort === "name" ? a.name.localeCompare(b.name, language) : b.updatedAt.localeCompare(a.updatedAt));
   const catalogPreview =
     availableCatalogRoutes.find((route) => route.datasetUrl === catalogPreviewId) || null;
   const uncatalogedDrafts = state.drafts.filter(
@@ -3467,7 +3369,7 @@ export default function App({
       lang={language}
       className={`city-tours-app ${
         embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
-      }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress ? " city-tours-app--modal-open" : ""}`}
+      }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress || pendingAction || donationConfirmation ? " city-tours-app--modal-open" : ""}`}
     >
       {!embedded && (
         <header className="app-header">
@@ -3498,7 +3400,7 @@ export default function App({
               </span>
             </div>
             <LanguageToggle language={language} onChange={changeStandaloneLanguage} />
-            <button className="header-logout" disabled={busy} onClick={logout}>
+            <button className="header-logout" disabled={busy} onClick={() => { void logout(); }}>
               <FontAwesomeIcon icon="right-from-bracket" />
               {t("logout")}
             </button>
@@ -3508,9 +3410,19 @@ export default function App({
 
       <main className="tours-shell">
 
-        <section className="route-workspace" aria-label={t("workspace")}>
+        <section className={`route-workspace${mobileMapOpen ? " is-map-open" : ""}`} aria-label={t("workspace")}>
+          <nav className="workspace-nav" aria-label={t("workspace")}>
+            {(["tours", "discover", "activities", "sharing"] as const).map((section) => <button key={section} type="button"
+              aria-current={activeSection === section ? "page" : undefined}
+              onClick={() => { setActiveSection(section); setMobileMapOpen(false); if (section !== "discover") setCatalogPreviewId(null); }}>
+              {t(section === "tours" ? "myTours" : section === "discover" ? "discover" : section === "activities" ? "activities" : "sharing")}
+            </button>)}
+          </nav>
+          <button className="mobile-view-toggle ghost" type="button" onClick={() => { setMobileMapOpen((value) => !value); if (!mobileMapOpen) setFitRequest((value) => value + 1); }}>{t(mobileMapOpen ? "showList" : "showMap")}</button>
           <aside className="planner-panel">
             <div className="planner-scroll">
+              {visibleError && <div className="workspace-error" role="alert"><span>{visibleError}</span><button type="button" className="ghost" aria-label={t("closeError")} onClick={() => setError(null)}>×</button></div>}
+              <div hidden={activeSection !== "tours"}>
               <section className="panel-section panel-section--planner">
                 <div className="section-heading">
                   <h1>{t("tourPlanner")}</h1>
@@ -3518,7 +3430,8 @@ export default function App({
                     className="icon-button"
                     title={t("newTour")}
                     aria-label={t("newTour")}
-                    onClick={beginNewDraft}
+                    disabled={busy}
+                    onClick={() => beginNewDraft()}
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M12 5v14M5 12h14" />
@@ -3539,27 +3452,13 @@ export default function App({
                 </div>
 
                 <div className="mode-row" aria-label={t("routeMode")}>
-                  <button
-                    className="active"
-                    type="button"
-                    disabled={busy || !isEditing}
-                    title={!isEditing ? t("editRoute") : undefined}
-                  >
-                    {t("drawFreely")}
-                  </button>
-                  <label className="file-button">
-                    {t("importRoute")}
-                    <input
-                      type="file"
-                      disabled={busy || !isEditing}
-                      accept=".gpx,.geojson,.json,application/gpx+xml,application/geo+json"
-                      onChange={(event) => {
-                        importFile(event.target.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
+                  {isEditing && <button className={isDrawing && isEditing ? "active" : "ghost"} type="button" disabled={busy || !isEditing}
+                    aria-pressed={isDrawing && isEditing} onClick={() => setIsDrawing((value) => !value)}>{t(isDrawing ? "finishDrawing" : "drawFreely")}</button>}
+                  <button className="file-button" type="button" disabled={busy} onClick={() => fileInput.current?.click()}>{t("importRoute")}</button>
+                  <input ref={fileInput} type="file" hidden accept=".gpx,.geojson,.json" onChange={(event) => { importFile(event.target.files?.[0]); event.target.value = ""; }} />
                 </div>
+                <p className="help-text">{t(isEditing ? "drawingHint" : "routePrivacyHint")}</p>
+                <p className="save-status" role="status">{busy ? t("saving") : hasPendingChanges ? t("unsavedChanges") : state.drafts.some((item) => item.id === draft.id) ? t("savedPrivately") : t("startRoute")}</p>
 
                 {isEditing ? (
                   <>
@@ -3600,6 +3499,9 @@ export default function App({
                     {t("editRoute")}
                   </button>
                 )}
+                <div className="tour-completion">
+                  <button className="primary" disabled={busy || !state.drafts.some((item) => item.id === draft.id) || hasPendingChanges || !isValidGeometry(draft.geometry)} onClick={confirmCompletion}>{t("tourDone")}</button>
+                </div>
               </section>
 
               <section className="panel-section list-card">
@@ -3607,9 +3509,14 @@ export default function App({
                   <h2>{t("myTours")}</h2>
                   <strong className="count-badge">{state.drafts.length}</strong>
                 </div>
+                {state.drafts.length > 0 && <div className="library-filters">
+                  <label>{t("searchTours")}<input type="search" value={tourQuery} onChange={(event) => setTourQuery(event.target.value)} /></label>
+                  <label>{t("sortTours")}<select value={tourSort} onChange={(event) => setTourSort(event.target.value)}><option value="recent">{t("recentFirst")}</option><option value="name">{t("nameOrder")}</option></select></label>
+                </div>}
                 <div className="item-list">
+                  {state.drafts.length > 0 && visibleDrafts.length === 0 && <p className="empty">{t("noMatchingTours")}</p>}
                   {state.drafts.length === 0 && <p className="empty">{t("noSavedTours")}</p>}
-                  {state.drafts.map((item) => {
+                  {visibleDrafts.map((item) => {
                     const publication = state.catalogPublications.find(
                       (candidate) => candidate.sourceDraftId === item.id
                     );
@@ -3617,6 +3524,7 @@ export default function App({
                       <article className={`draft-item ${item.id === draft.id ? "draft-item--active" : ""}`} key={item.id}>
                         <button
                           className="list-item"
+                          disabled={busy}
                           aria-current={item.id === draft.id ? "true" : undefined}
                           aria-label={t("selectRoute", { name: item.name })}
                           onClick={() => selectDraft(item)}
@@ -3630,7 +3538,7 @@ export default function App({
                                     ? "cataloged"
                                     : "catalogOutdated"
                                 )}`
-                              : ""}
+                              : ` · ${t(item.adoptedFromCatalog ? "privateCopy" : "privateRoute")}`}
                           </small>
                         </button>
                         <div className="draft-actions draft-actions--catalog">
@@ -3657,87 +3565,20 @@ export default function App({
                     {t("indexUncatalogedTours")}
                   </button>
                 )}
-                <div className="tour-completion">
-                  <label>
-                    {t("completedOn")}
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder={datePlaceholder(language)}
-                      value={completedDateInput}
-                      aria-invalid={completedDateError ? "true" : undefined}
-                      aria-describedby={completedDateError && visibleError ? "map-error-message" : undefined}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setCompletedDateInput(value);
-                        try {
-                          parseDate(value, language);
-                          setCompletedDateError(null);
-                        } catch {
-                          // Keep partial input editable; validation runs before completion.
-                        }
-                      }}
-                      onBlur={() => {
-                        try {
-                          const normalized = parseDate(completedDateInput, language);
-                          setCompletedDateInput(formatDate(normalized, language));
-                          setCompletedDateError(null);
-                          setError(null);
-                        } catch (reason) {
-                          const message =
-                            reason instanceof Error ? reason.message : "Bitte gib ein gültiges Datum ein.";
-                          setCompletedDateError(message);
-                          setError(message);
-                        }
-                      }}
-                    />
-                  </label>
-                  <button className="primary" disabled={busy} onClick={confirmCompletion}>{t("tourDone")}</button>
-                </div>
+
               </section>
 
-              {podConnected && (
-                <section className="panel-section list-card catalog-routes-card">
-                  <div className="section-heading">
-                    <h2>{t("catalogedTours")}</h2>
-                    <strong className="count-badge">{availableCatalogRoutes.length}</strong>
-                  </div>
-                  <div className="item-list catalog-route-list">
-                    {catalogLoading && <p className="empty">{t("loadingCatalog")}</p>}
-                    {!catalogLoading && availableCatalogRoutes.length === 0 && (
-                      <p className="empty">{t("noCatalogedTours")}</p>
-                    )}
-                    {availableCatalogRoutes.map((route) => (
-                      <article
-                        className={`catalog-route-item${catalogPreviewId === route.datasetUrl ? " is-previewed" : ""}`}
-                        key={route.datasetUrl}
-                        onMouseEnter={() => setCatalogPreviewId(route.datasetUrl)}
-                        onMouseLeave={() => setCatalogPreviewId(null)}
-                        onFocus={() => setCatalogPreviewId(route.datasetUrl)}
-                        onBlur={(event) => {
-                          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                            setCatalogPreviewId(null);
-                          }
-                        }}
-                      >
-                        <div>
-                          <strong>{route.name}</strong>
-                          <small>{distanceLabel(route.geometry, language)} · {route.publisher}</small>
-                        </div>
-                        <button
-                          className="catalog-adopt"
-                          disabled={busy}
-                          onClick={() => adoptRouteFromCatalog(route)}
-                        >
-                          {t("addToMyTours")}
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              )}
-
+              </div>
+              <div hidden={activeSection !== "discover"}>
+                {podConnected && !onboardingPublicRegistries.length && <section className="panel-section"><p>{language === "de" ? "Der gemeinsame Katalog benötigt eine eingerichtete öffentliche Registry. Deinen privaten Tourbereich kannst du bereits nutzen." : "The shared catalog needs a configured public registry. Your private tour space is already available."}</p><button className="primary" disabled={busy} onClick={() => requestPublicSetup()}>{t("publicSetup")}</button></section>}
+                {podConnected ? <RouteCatalog routes={availableCatalogRoutes} discoveredCount={catalogedRoutes.length}
+                  loading={catalogLoading} error={catalogError ? localizeUserFacingMessage(catalogError, language) : null} report={catalogReport}
+                  previewId={catalogPreviewId} busy={busy} language={language}
+                  onPreview={(id) => { setCatalogPreviewId(id); if (id) setMobileMapOpen(true); }}
+                  onAdopt={adoptRouteFromCatalog} onRetry={() => { void refreshCatalogedRoutes(); }} />
+                  : <section className="panel-section"><h2>{t("discover")}</h2><p>{t("connectForCatalog")}</p></section>}
+              </div>
+              <div hidden={activeSection !== "activities"}>
               <section className="panel-section list-card">
                 <div className="section-heading">
                   <h2>{t("completedTours")}</h2>
@@ -3751,7 +3592,9 @@ export default function App({
                     <article className="activity-item" key={activity.id}>
                       <div>
                         <strong>{activity.name}</strong>
-                        <small>{formatDate(activity.completedDate, language)} · {summaryText(activity, language)}</small>
+                        <small>{formatDate(activity.completedDate, language)} · {t(activity.activityType === "walking" ? "walking" : "cycling")}</small>
+                        <small>{summaryText(activity, language)}</small>
+                        <small className="estimate-label">{t(activity.activitySummary.durationSource === "gpx" ? "gpxAndEstimatedValues" : "estimatedValues")}</small>
                       </div>
                       <button
                         className="delete-link activity-delete"
@@ -3763,65 +3606,64 @@ export default function App({
                     </article>
                   ))}
                 </div>
-                {podConnected && state.activities.length > 0 && (
-                  <div className="health-donation-actions">
-                    {state.activeRun ? (
-                      <button className="danger" disabled={busy} onClick={resetScenario}>
-                        {t("resetDonation")}
-                      </button>
-                    ) : (
-                      <button className="publish" disabled={busy} onClick={publish}>
-                        {t("shareDonation")}
-                      </button>
-                    )}
-                  </div>
-                )}
               </section>
+              </div>
+              <div hidden={activeSection !== "sharing"}>
+                <section className="panel-section sharing-panel">
+                  <h2>{t("sharing")}</h2>
+                  {podConnected && !publicSharingReady && <button className="primary" disabled={busy} onClick={() => requestPublicSetup()}>{t("publicSetup")}</button>}
+                  <p>{t("sharingIntro")}</p>
+                  <h3>{t("publicRouteCatalog")}</h3>
+                  {state.catalogPublications.length === 0 && <p className="empty">{t("noPublicRoutes")}</p>}
+                  {state.catalogPublications.map((publication) => {
+                    const item = state.drafts.find((entry) => entry.id === publication.sourceDraftId);
+                    return item ? <article className="sharing-route" key={publication.routeTemplateId}><strong>{item.name}</strong>
+                      <p>{t(publication.phase === "published" ? "publicRoute" : publication.phase === "publishing" ? "publishingRoute" : publication.phase === "updating" ? "updatingRoute" : "removingRoute")}</p>
+                      <button className="ghost" disabled={busy} onClick={() => requestCatalogRemoval(item)}>{t("removeFromCatalog")}</button></article> : null;
+                  })}
+                  <h3>{t("donation")}</h3>
+                  <p>{t("donationExplanation")}</p>
+                  {state.activeRun && <div className="donation-status" role="status">
+                    <strong>{t(state.activeRun.phase === "published" ? "donationPrepared" : state.activeRun.phase === "resetting" ? "donationResetting" : "donationPublishing")}</strong>
+                    <p>{t("donationIncluded", { included: state.activeRun.activityIds.length, additional: state.activities.filter((activity) => !state.activeRun!.activityIds.includes(activity.id)).length })}</p>
+                    <p>{t("donationNextStep")}</p>
+                    <a href="/notifications">{t("manageRequests")}</a>
+                  </div>}
+                  {podConnected && state.activities.length > 0 ? <div className="health-donation-actions">
+                    {state.activeRun ? <button className="danger" disabled={busy} onClick={() => setDonationConfirmation("reset")}>{t("resetDonation")}</button>
+                      : <button className="publish" disabled={busy} onClick={() => requestDonation()}>{t("shareDonation")}</button>}
+                  </div> : <p className="empty">{t(podConnected ? "noDonationActivities" : "connectForCatalog")}</p>}
+                </section>
+              </div>
             </div>
           </aside>
 
           <section className="map-stage" aria-label={t("tourMap")}>
             <TourMap
               geometry={draft.geometry}
+              routeId={draft.id}
+              fitRequest={fitRequest}
               savedRoutes={mapRoutes}
               catalogPreview={catalogPreview}
-              editable={isEditing}
+              editable={isEditing && isDrawing && !busy && !catalogPreview && activeSection === "tours"}
               onPoint={addPoint}
               onSelectRoute={selectDraftById}
               language={language}
             />
 
             <aside className="map-stats" aria-label={t("routeInformation")}>
-              <div><span>{t("distance")}</span><strong>{distanceLabel(draft.geometry, language)}</strong></div>
-              <div><span>{t("duration")}</span><strong>{draft.durationMinutes ? `${Math.round(draft.durationMinutes)} ${t("minutesShort")}` : "–"}</strong></div>
+              <div><span>{t("distance")}</span><strong>{distanceLabel(catalogPreview?.geometry || draft.geometry, language)}</strong></div>
+              <div><span>{t(!catalogPreview && draft.durationSource === "gpx" ? "gpxDuration" : "duration")}</span><strong>{!catalogPreview && draft.durationMinutes ? `${Math.round(draft.durationMinutes)} ${t("minutesShort")}` : t("durationAtCompletion")}</strong></div>
             </aside>
-            {visibleError && (
-              <div className="map-error-overlay" role="alert" aria-live="assertive">
-                <span id="map-error-message">{visibleError}</span>
-                <button
-                  type="button"
-                  className="map-error-close"
-                  aria-label={t("closeError")}
-                  title={t("closeError")}
-                  onClick={() => {
-                    setError(null);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m6 6 12 12M18 6 6 18" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            {isEditing && editablePointCount > 0 && (
+            {isEditing && activeSection === "tours" && (editablePointCount > 0 || geometryHistory.length > 0) && (
               <div className="map-edit-toolbar" role="toolbar" aria-label={t("editRoute")}>
-                <button className="map-tool-button" disabled={busy} onClick={undoPoint} title={t("undoLastPoint")}>
+                <button className="map-tool-button" disabled={busy || !geometryHistory.length} onClick={undoPoint} title={t("undoLastPoint")}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" />
                   </svg>
                   <span>{t("undoPoint")}</span>
                 </button>
-                <button className="map-tool-button map-tool-button--danger" disabled={busy} onClick={clearRoute} title={t("clearEntireRoute")}>
+                <button className="map-tool-button map-tool-button--danger" disabled={busy || !editablePointCount} onClick={clearRoute} title={t("clearEntireRoute")}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
                   </svg>
@@ -3829,6 +3671,8 @@ export default function App({
                 </button>
               </div>
             )}
+            <button className="fit-route-button ghost" type="button" disabled={!draft.geometry.flat().length && !catalogPreview} onClick={() => setFitRequest((value) => value + 1)}>{t("fitRoute")}</button>
+            {catalogPreview && <div className="map-preview-label"><strong>{catalogPreview.name}</strong><button type="button" className="ghost" onClick={() => setCatalogPreviewId(null)} aria-label={t("closePreview")}>×</button></div>}
             <aside className="map-legend" aria-label={t("mapLegend")}>
               <strong>{t("routes")}</strong>
               <span><i className="legend-line legend-line--current" />{t("currentTour")}</span>
@@ -3839,21 +3683,7 @@ export default function App({
         </section>
 
       {catalogConfirmation && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={() => {
-            if (!busy) setCatalogConfirmation(null);
-          }}
-        >
-          <section
-            className={`confirm-dialog ${catalogConfirmation.kind === "remove" ? "confirm-dialog--danger" : "confirm-dialog--catalog"}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="catalog-confirmation-title"
-            aria-describedby="catalog-confirmation-copy"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
+        <Modal labelledBy="catalog-confirmation-title" describedBy="catalog-confirmation-copy" className={`confirm-dialog ${catalogConfirmation.kind === "remove" ? "confirm-dialog--danger" : "confirm-dialog--catalog"}`} busy={busy} onClose={() => setCatalogConfirmation(null)}>
             <span className="eyebrow">{t("publicRouteCatalog")}</span>
             <h2 id="catalog-confirmation-title">
               {catalogConfirmation.kind === "index"
@@ -3884,27 +3714,11 @@ export default function App({
                 {catalogConfirmation.kind === "index" ? t("publishPublicly") : t("removeFromCatalog")}
               </button>
             </div>
-          </section>
-        </div>
+        </Modal>
       )}
 
       {deleteConfirmation && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={() => {
-            if (!busy) setDeleteConfirmation(null);
-          }}
-        >
-          <section
-            className="confirm-dialog confirm-dialog--danger"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-confirmation-title"
-            aria-describedby="delete-confirmation-copy"
-            data-testid="delete-confirmation-dialog"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
+        <Modal labelledBy="delete-confirmation-title" describedBy="delete-confirmation-copy" className={"confirm-dialog--danger"} busy={busy} onClose={() => setDeleteConfirmation(null)} testId="delete-confirmation-dialog">
             <span className="eyebrow">{t("confirmDeletion")}</span>
             <h2 id="delete-confirmation-title">
               {deleteConfirmation.kind === "draft"
@@ -3953,25 +3767,57 @@ export default function App({
                   : t("delete")}
               </button>
             </div>
-          </section>
-        </div>
+        </Modal>
       )}
 
       {completeConfirmation && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setCompleteConfirmation(null)}>
-          <section
-            className="confirm-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="complete-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
+        <Modal labelledBy="complete-title" className={""} busy={busy} onClose={() => setCompleteConfirmation(null)}>
             <span className="eyebrow">{t("confirmCompletion")}</span>
             <h2 id="complete-title">{t("saveCompletedQuestion")}</h2>
             <dl>
               <div><dt>{t("route")}</dt><dd>{draft.name}</dd></div>
-              <div><dt>{t("completedOn")}</dt><dd>{formatDate(completeConfirmation.completedDate, language)}</dd></div>
+
             </dl>
+            <div className="completion-date-field">
+                  <label>
+                    {t("completedOn")}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder={datePlaceholder(language)}
+                      value={completedDateInput}
+                      aria-invalid={completedDateError ? "true" : undefined}
+                      aria-describedby={completedDateError ? "completion-date-error" : undefined}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setCompletedDateInput(value);
+                        try {
+                          parseDate(value, language);
+                          setCompletedDateError(null);
+                        } catch {
+                          // Keep partial input editable; validation runs before completion.
+                        }
+                      }}
+                      onBlur={() => {
+                        try {
+                          const normalized = parseDate(completedDateInput, language);
+                          setCompletedDateInput(formatDate(normalized, language));
+                          setCompletedDateError(null);
+
+                        } catch (reason) {
+                          const message =
+                            reason instanceof Error ? reason.message : "Bitte gib ein gültiges Datum ein.";
+                          setCompletedDateError(message);
+
+                        }
+                      }}
+                    />
+                  </label>
+
+              {completedDateError && <p id="completion-date-error" role="alert">{localizeUserFacingMessage(completedDateError, language)}</p>}
+              <div className="date-shortcuts">{[0, 1].map((days) => <button type="button" className="ghost" key={days} onClick={() => { const date = new Date(); date.setDate(date.getDate() - days); setCompletedDateInput(formatDate(localDate(date), language)); setCompletedDateError(null); }}>{t(days ? "yesterday" : "today")}</button>)}</div>
+            </div>
             <fieldset className="activity-choice">
               <legend>{t("howCompleted")}</legend>
               <div>
@@ -3997,6 +3843,7 @@ export default function App({
                 </label>
               </div>
             </fieldset>
+            <p className="help-text">{t("activityEstimatesExplanation")}</p>
             {completeConfirmation.summary && (
               <dl className="activity-preview">
                 <div>
@@ -4024,15 +3871,32 @@ export default function App({
                     return;
                   }
                   const activityType = completeConfirmation.activityType;
-                  const completionDate = completeConfirmation.completedDate;
+                  let completionDate: string;
+                  try { completionDate = parseDate(completedDateInput, language); }
+                  catch (reason) { setCompletedDateError(reason instanceof Error ? reason.message : "Bitte gib ein gültiges Datum ein."); return; }
                   setCompleteConfirmation(null);
                   void handleComplete(activityType, completionDate);
                 }}
               >{t("save")}</button>
             </div>
-          </section>
-        </div>
+        </Modal>
       )}
+      {pendingAction && <Modal labelledBy="pending-title" busy={busy} onClose={() => setPendingAction(null)}>
+        <h2 id="pending-title">{t("unsavedChanges")}</h2><p>{t("pendingChangesQuestion")}</p>
+        {activeDraftPublication && <p>{t("publicRouteEditHint")}</p>}
+        {visibleError && <p role="alert">{visibleError}</p>}
+        <div className="dialog-actions">
+          <button className="ghost" disabled={busy} onClick={() => setPendingAction(null)}>{t("cancel")}</button>
+          <button className="danger" disabled={busy} onClick={() => { if (pendingAction.kind === "leave" || pendingAction.kind === "logout") setIsEditing(false); setContinuedAction(pendingAction); setPendingAction(null); }}>{t("discardContinue")}</button>
+          <button className="primary" disabled={busy || !draft.name.trim() || !isValidGeometry(draft.geometry)} onClick={() => { const action = pendingAction; void mutate(async () => { await persistDraft(draft); setIsEditing(false); setPendingAction(null); setContinuedAction(action); }); }}>{t("saveContinue")}</button>
+        </div>
+      </Modal>}
+      {donationConfirmation && <Modal labelledBy="donation-title" busy={busy} onClose={() => setDonationConfirmation(null)}>
+        <h2 id="donation-title">{t(donationConfirmation === "publish" ? "shareDonation" : "resetDonation")}</h2>
+        <p>{t(donationConfirmation === "publish" ? "donationConsent" : "donationRevokeExplanation")}</p>
+        {donationConfirmation === "publish" && <><p>{t("donationSnapshot", { count: state.activities.length })}</p><ul className="catalog-confirmation-list">{state.activities.map((activity) => <li key={activity.id}>{formatDate(activity.completedDate, language)} · {activity.name}</li>)}</ul></>}
+        <div className="dialog-actions"><button className="ghost" onClick={() => setDonationConfirmation(null)}>{t("cancel")}</button><button className={donationConfirmation === "publish" ? "primary" : "danger"} data-testid="donation-confirmation-submit" onClick={() => { const action = donationConfirmation; setDonationConfirmation(null); if (action === "publish") void publish(); else void resetScenario(); }}>{t(donationConfirmation === "publish" ? "prepareDonation" : "revokeDonation")}</button></div>
+      </Modal>}
       {completionInProgress && (
         <CompletionLoadingOverlay
           activityType={completionInProgress}

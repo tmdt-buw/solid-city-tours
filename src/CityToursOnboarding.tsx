@@ -6,6 +6,8 @@ import type { PublicRegistryOption } from "./catalog";
 import "./CityToursOnboarding.css";
 
 type AppOnboardingProps = {
+  mode?: "private" | "publishing";
+  onCancel?: () => void;
   context: CityToursOnboardingContext;
   language: ToursLanguage;
   podRoot: string;
@@ -30,7 +32,7 @@ const copy = {
     title: "Your tours, under your control",
     intro: "Before City Tours creates its private app space, choose how the app may work with your Pod.",
     privateTitle: "Private tour space",
-    privateText: "Create owner-only folders for drafts, completed tours and app settings.",
+    privateText: "Store tours, activities and settings in your Pod, accessible only to you.",
     derivedTitle: "Derived activity values",
     derivedText: "Distance, time, pace and steps are calculated from the route. They are not sensor measurements.",
     inboxTitle: "Solid Inbox for access requests",
@@ -41,8 +43,6 @@ const copy = {
     catalogText: "Only routes you explicitly index become public templates. The route name is published as the public Catalog title; exact coordinates, start and destination can then be copied by others. Public Catalog metadata also includes your publisher name, your WebID as creator and, when available in your Solid profile, your contact email.",
     donationTitle: "Health data donation",
     donationText: "A donation is a separate restricted snapshot. Environmental Monitoring must request read access. Its public Catalog metadata includes your publisher name, your WebID as creator and, when available in your Solid profile, your contact email. After you approve read access, your route and derived activity statistics may appear publicly even when yours is the only contribution. WebID and direct Pod URLs are removed from the aggregate, but the route can still be identifying.",
-    standaloneTitle: "Independent app setup",
-    standaloneText: "City Tours performs these app-specific Pod changes itself. You do not need to complete the Dataspace Manager onboarding first.",
     registryChoice: "Public registry for City Tours",
     profileTitle: "Public Catalog identity",
     profileText: "After your confirmation, City Tours stores these values in your own WebID profile. They are published as the publisher and contact metadata of your public Catalog entries.",
@@ -63,19 +63,17 @@ const copy = {
     title: "Deine Touren, unter deiner Kontrolle",
     intro: "Bevor City Tours seinen privaten App-Bereich anlegt, legst du fest, wie die App mit deinem Pod arbeiten darf.",
     privateTitle: "Privater Tourbereich",
-    privateText: "Owner-only Ordner für Entwürfe, gemachte Touren und App-Einstellungen anlegen.",
+    privateText: "Touren, Aktivitäten und Einstellungen in deinem Pod speichern. Nur du erhältst Zugriff.",
     derivedTitle: "Abgeleitete Aktivitätswerte",
     derivedText: "Distanz, Zeit, Tempo und Schritte werden aus der Route berechnet. Es sind keine Sensormesswerte.",
     inboxTitle: "Solid-Inbox für Zugriffsanfragen",
-    inboxText: "Den Container inbox/ im Pod anlegen oder reparieren und im WebID-Profil verlinken. Jeder darf Zugriffsanfragen anhängen; öffentliches Lesen, Schreiben und Control bleiben deaktiviert.",
+    inboxText: "Den Container inbox/ im Pod anlegen oder reparieren und im WebID-Profil verlinken. Andere dürfen Anfragen senden, aber weder Anfragen lesen noch bestehende Anfragen oder Rechte verändern.",
     registryTitle: "Öffentliche Forschungs-Registry",
     registryText: "Das Solid-Profil in den Research-Modus schalten, die gewählte öffentliche Registry ergänzen, deine WebID dort registrieren und öffentlich lesbare Katalogressourcen vorbereiten. Dadurch werden deine öffentlichen Katalogeinträge auffindbar.",
     catalogTitle: "Öffentlicher Routenkatalog",
-    catalogText: "Nur ausdrücklich von dir indizierte Routen werden öffentliche Vorlagen. Der Tourname wird als öffentlicher Katalogtitel veröffentlicht; exakte Koordinaten, Start und Ziel können dann von anderen kopiert werden. Die öffentlichen Katalogmetadaten enthalten außerdem deinen Publisher-Namen, deine WebID als Creator und, sofern im Solid-Profil vorhanden, deine Kontakt-E-Mail.",
+    catalogText: "Nur ausdrücklich von dir geteilte Routen werden öffentliche Vorlagen. Der Tourname wird als öffentlicher Katalogtitel veröffentlicht; exakte Koordinaten, Start und Ziel können dann von anderen kopiert werden. Die öffentlichen Katalogmetadaten enthalten außerdem deinen Publisher-Namen, deine WebID als Creator und, sofern im Solid-Profil vorhanden, deine Kontakt-E-Mail.",
     donationTitle: "Gesundheitsdatenspende",
-    donationText: "Eine Spende ist ein separater Restricted Snapshot. Environmental Monitoring muss Lesezugriff anfragen. Die öffentlichen Katalogmetadaten enthalten deinen Publisher-Namen, deine WebID als Creator und, sofern im Solid-Profil vorhanden, deine Kontakt-E-Mail. Nach deiner Lesefreigabe können deine Route und die daraus abgeleiteten Aktivitätsstatistiken bereits öffentlich erscheinen, wenn deine Spende der einzige Beitrag ist. WebID und direkte Pod-URLs werden aus dem Aggregat entfernt, die Route kann dich dennoch identifizierbar machen.",
-    standaloneTitle: "Eigenständige App-Einrichtung",
-    standaloneText: "City Tours führt diese app-spezifischen Pod-Änderungen selbst aus. Du musst das Onboarding im Dataspace Manager dafür nicht zuerst abschließen.",
+    donationText: "Eine Spende ist eine separate geschützte Kopie deiner Aktivitäten. Environmental Monitoring muss Lesezugriff anfragen. Die öffentlichen Katalogmetadaten enthalten deinen Publisher-Namen, deine WebID als Creator und, sofern im Solid-Profil vorhanden, deine Kontakt-E-Mail. Nach deiner Lesefreigabe können deine Route und die daraus abgeleiteten Aktivitätsstatistiken bereits öffentlich erscheinen, wenn deine Spende der einzige Beitrag ist. WebID und direkte Pod-URLs werden aus dem Aggregat entfernt, die Route kann dich dennoch identifizierbar machen.",
     registryChoice: "Öffentliche Registry für City Tours",
     profileTitle: "Öffentliche Katalogidentität",
     profileText: "Nach deiner Bestätigung speichert City Tours diese Werte in deinem eigenen WebID-Profil. Sie werden als Publisher- und Kontaktmetadaten deiner öffentlichen Katalogeinträge veröffentlicht.",
@@ -95,6 +93,8 @@ const copy = {
 
 export default function AppOnboarding({
   context,
+  mode = "private",
+  onCancel,
   language,
   podRoot,
   registryOptions,
@@ -108,23 +108,21 @@ export default function AppOnboarding({
   onLogout,
 }: AppOnboardingProps) {
   const c = copy[language];
+  const publishing = mode === "publishing";
   const items = useMemo(
     () => [
-      { key: "private", icon: "route" as const, title: c.privateTitle, text: c.privateText },
-      { key: "derived", icon: "person-walking" as const, title: c.derivedTitle, text: c.derivedText },
-      ...(context === "standalone"
+      ...(!publishing ? [{ key: "private", icon: "route" as const, title: c.privateTitle, text: c.privateText },
+      { key: "derived", icon: "person-walking" as const, title: c.derivedTitle, text: c.derivedText }] : []),
+      ...(publishing && context === "standalone"
         ? [
             { key: "inbox", icon: "route" as const, title: c.inboxTitle, text: c.inboxText },
             { key: "registry", icon: "route" as const, title: c.registryTitle, text: c.registryText },
           ]
         : []),
-      { key: "catalog", icon: "route" as const, title: c.catalogTitle, text: c.catalogText },
-      { key: "donation", icon: "bicycle" as const, title: c.donationTitle, text: c.donationText },
-      ...(context === "standalone"
-        ? [{ key: "dataspace", icon: "route" as const, title: c.standaloneTitle, text: c.standaloneText }]
-        : []),
+      ...(publishing ? [{ key: "catalog", icon: "route" as const, title: c.catalogTitle, text: c.catalogText },
+      { key: "donation", icon: "bicycle" as const, title: c.donationTitle, text: c.donationText }] : []),
     ],
-    [c, context]
+    [c, context, publishing]
   );
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const initiallyConfiguredRegistry = registryOptions.find((option) =>
@@ -141,8 +139,8 @@ export default function AppOnboarding({
   const validEmail = normalizedEmail.length <= 254 && /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/.test(normalizedEmail);
   const complete =
     items.every((item) => accepted[item.key]) &&
-    (context === "embedded" || Boolean(selectedRegistry)) &&
-    (context === "embedded" ? infrastructureReady && profileReady : validPublisher && validEmail);
+    (!publishing || ((context === "embedded" || Boolean(selectedRegistry)) &&
+    (context === "embedded" ? infrastructureReady && profileReady : validPublisher && validEmail)));
 
   return (
     <section className={`tours-onboarding tours-onboarding--${context}`} aria-labelledby="tours-onboarding-title">
@@ -150,15 +148,15 @@ export default function AppOnboarding({
         <span className="tours-onboarding__mark" aria-hidden="true"><FontAwesomeIcon icon="route" /></span>
         <div>
           <span className="tours-onboarding__eyebrow">{c.eyebrow}</span>
-          <h1 id="tours-onboarding-title">{c.title}</h1>
-          <p>{c.intro}</p>
+          <h1 id="tours-onboarding-title">{publishing ? (language === "de" ? "Öffentliches Teilen einrichten" : "Set up public sharing") : c.title}</h1>
+          <p>{publishing ? (language === "de" ? "Erst nach deiner Bestätigung richten wir das öffentliche Teilen ein. Einzelne Routen und Spenden teilst du anschließend separat." : "Public sharing is configured only after your confirmation. You will still choose each route and donation separately.") : (language === "de" ? "Starte mit deinem privaten Tourbereich. Öffentliches Teilen kannst du später einrichten." : "Start with your private tour space. You can set up public sharing later.")}</p>
         </div>
       </header>
 
-      <div className="tours-onboarding__destination">
-        <span>{c.destination}</span>
+      <details className="tours-onboarding__destination">
+        <summary>{c.destination}</summary>
         <code>{`${podRoot}solid-tours/`}</code>
-      </div>
+      </details>
 
       <div className="tours-onboarding__checks">
         {items.map((item, index) => (
@@ -178,7 +176,7 @@ export default function AppOnboarding({
         ))}
       </div>
 
-      {context === "standalone" && (
+      {publishing && context === "standalone" && (
         <fieldset className="tours-onboarding__profile-fields">
           <legend>{c.profileTitle}</legend>
           <p>{c.profileText}</p>
@@ -194,7 +192,7 @@ export default function AppOnboarding({
         </fieldset>
       )}
 
-      {context === "standalone" && (
+      {publishing && context === "standalone" && (
         <fieldset className="tours-onboarding__registry-options">
           <legend>{c.registryChoice}</legend>
           {registryOptions.length > 0 ? (
@@ -230,15 +228,17 @@ export default function AppOnboarding({
 
       <footer className="tours-onboarding__actions">
         <p aria-live="polite">
-          {context === "embedded" && !profileReady
+          {publishing && context === "embedded" && !profileReady
             ? c.profileManagerRequired
-            : !infrastructureReady && context === "embedded"
+            : publishing && !infrastructureReady && context === "embedded"
               ? c.generalOnboardingRequired
             : complete
               ? ""
               : c.required}
         </p>
         <div>
+          {onCancel && <button type="button" className="ghost" disabled={busy} onClick={onCancel}>{language === "de" ? "Zurück zu meinen Touren" : "Back to my tours"}</button>}
+          {publishing && context === "embedded" && (!infrastructureReady || !profileReady) && <a href={profileReady ? "/" : "/profile"}>{language === "de" ? "Im Dataspace Manager einrichten" : "Set up in Dataspace Manager"}</a>}
           {onLogout && <button type="button" className="ghost" disabled={busy} onClick={onLogout}>{c.logout}</button>}
           <button
             type="button"
@@ -246,13 +246,13 @@ export default function AppOnboarding({
             disabled={busy || !complete}
             onClick={() =>
               onComplete(
-                context === "standalone"
+                publishing && context === "standalone"
                   ? { registryUrl: selectedRegistry, publisher: normalizedPublisher, contactEmail: normalizedEmail }
                   : {}
               )
             }
           >
-            {c.confirm}
+            {publishing ? c.confirm : language === "de" ? "Privaten Tourbereich einrichten" : "Set up private tour space"}
           </button>
         </div>
       </footer>

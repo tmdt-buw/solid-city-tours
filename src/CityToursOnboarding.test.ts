@@ -35,6 +35,7 @@ describe("CityToursOnboarding public metadata disclosure", () => {
       root.render(
         createElement(CityToursOnboarding, {
           context,
+          mode: "publishing",
           language,
           podRoot: "https://pod.example/alice/",
           registryOptions: [
@@ -78,6 +79,24 @@ describe("CityToursOnboarding public metadata disclosure", () => {
     expect(donationItem?.textContent).toContain("route can still be identifying");
   });
 
+  it.each(["embedded", "standalone"] as const)("allows private %s setup without public identity or infrastructure", (context) => {
+    const onComplete = vi.fn();
+    act(() => root.render(createElement(CityToursOnboarding, {
+      context, language: "en", podRoot: "https://pod.example/alice/",
+      registryOptions: [], configuredPublicRegistries: [], infrastructureReady: false,
+      profileReady: false, profilePublisher: "", profileContactEmail: "", busy: false, onComplete,
+    })));
+    const checks = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect(checks).toHaveLength(2);
+    expect(container.querySelector('input[type="email"], input[type="radio"]')).toBeNull();
+    const submit = container.querySelector<HTMLButtonElement>("button.primary")!;
+    expect(submit.disabled).toBe(true);
+    act(() => checks.forEach((checkbox) => checkbox.click()));
+    expect(submit.disabled).toBe(false);
+    act(() => submit.click());
+    expect(onComplete).toHaveBeenCalledWith({});
+  });
+
   it("names Publisher, Creator-WebID, and optional contact email in German", () => {
     renderOnboarding("de");
 
@@ -102,8 +121,8 @@ describe("CityToursOnboarding public metadata disclosure", () => {
   it("keeps embedded onboarding strictly app-specific", () => {
     const onComplete = renderOnboarding("en", "embedded");
 
-    expect(container.textContent).toContain("Private tour space");
-    expect(container.textContent).toContain("Derived activity values");
+    expect(container.textContent).not.toContain("Private tour space");
+    expect(container.textContent).not.toContain("Derived activity values");
     expect(container.textContent).toContain("Public route catalog");
     expect(container.textContent).toContain("Health data donation");
     expect(container.textContent).not.toContain("Solid Inbox for access requests");
@@ -132,7 +151,6 @@ describe("CityToursOnboarding public metadata disclosure", () => {
     expect(container.textContent).toContain("public read, write and control remain disabled");
     expect(container.textContent).toContain("Public research registry");
     expect(container.textContent).toContain("register your WebID there");
-    expect(container.textContent).toContain("You do not need to complete the Dataspace Manager onboarding first");
     expect(container.textContent).toContain("Public Catalog identity");
     expect(container.querySelector<HTMLInputElement>('input[name="city-tours-publisher"]')?.value).toBe("Hannah Mueller");
     expect(container.querySelector<HTMLInputElement>('input[name="city-tours-contact-email"]')?.value).toBe("hannah@example.org");

@@ -121,7 +121,7 @@ describe("City Tours onboarding storage", () => {
       responseAt(
         onboardingUrl,
         JSON.stringify({
-          schemaVersion: 3,
+          schemaVersion: 4,
           app: "solid-tours",
           appSpecificAcceptedAt: "2026-08-28T08:00:00.000Z",
         }),

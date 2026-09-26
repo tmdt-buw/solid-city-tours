@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   completeOnboardingRecord,
+  completePrivateOnboardingRecord,
+  privateOnboardingCompleteFor,
   onboardingCompleteFor,
   parseCityToursOnboardingRecord,
 } from "./appOnboarding";
@@ -10,6 +12,24 @@ const STANDALONE_ACCEPTED_AT = "2026-08-28T08:05:00.000Z";
 const REGISTRY_URL = "https://registry.example/research";
 
 describe("City Tours app onboarding record", () => {
+  it("roundtrips private consent without granting public publishing consent", () => {
+    const privateRecord = completePrivateOnboardingRecord(null, "standalone", APP_ACCEPTED_AT);
+    expect(parseCityToursOnboardingRecord(privateRecord)).toEqual(privateRecord);
+    expect(privateOnboardingCompleteFor(privateRecord, "standalone")).toBe(true);
+    expect(onboardingCompleteFor(privateRecord, "standalone")).toBe(false);
+    expect(privateRecord.publicRegistryUrl).toBeUndefined();
+    const publicRecord = completeOnboardingRecord(privateRecord, "standalone", REGISTRY_URL, STANDALONE_ACCEPTED_AT);
+    expect(publicRecord.appSpecificAcceptedAt).toBe(APP_ACCEPTED_AT);
+    expect(publicRecord.publicPublishingAcceptedAt).toBe(STANDALONE_ACCEPTED_AT);
+    expect(onboardingCompleteFor(publicRecord, "standalone")).toBe(true);
+  });
+
+  it("rejects incomplete public consent even in a private-first record", () => {
+    const privateRecord = completePrivateOnboardingRecord(null, "embedded", APP_ACCEPTED_AT);
+    expect(parseCityToursOnboardingRecord({ ...privateRecord, publicRegistryUrl: REGISTRY_URL })).toBeNull();
+    expect(parseCityToursOnboardingRecord({ ...privateRecord, publicPublishingAcceptedAt: APP_ACCEPTED_AT })).toBeNull();
+    expect(privateOnboardingCompleteFor(privateRecord, "standalone")).toBe(false);
+  });
   it("records app-specific public setup consent for the embedded context", () => {
     const record = completeOnboardingRecord(
       null,
@@ -80,7 +100,7 @@ describe("City Tours app onboarding record", () => {
     };
     expect(parseCityToursOnboardingRecord(valid)).toEqual(valid);
     expect(parseCityToursOnboardingRecord({ ...valid, app: "other-app" })).toBeNull();
-    expect(parseCityToursOnboardingRecord({ ...valid, schemaVersion: 3 })).toBeNull();
+    expect(parseCityToursOnboardingRecord({ ...valid, schemaVersion: 4 })).toBeNull();
     expect(
       parseCityToursOnboardingRecord({ ...valid, appSpecificAcceptedAt: "2026-08-28" })
     ).toBeNull();
@@ -116,7 +136,7 @@ describe("City Tours app onboarding record", () => {
 
   it("turns an unsupported future record into an unaccepted but repairable state", () => {
     const unsupported = parseCityToursOnboardingRecord({
-      schemaVersion: 3,
+      schemaVersion: 4,
       app: "solid-tours",
       appSpecificAcceptedAt: APP_ACCEPTED_AT,
       publicPublishingAcceptedAt: APP_ACCEPTED_AT,

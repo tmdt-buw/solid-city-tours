@@ -1,11 +1,11 @@
 export type CityToursOnboardingContext = "embedded" | "standalone";
 
 export type CityToursOnboardingRecord = {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   app: "solid-tours";
   appSpecificAcceptedAt: string;
-  publicPublishingAcceptedAt: string;
-  publicRegistryUrl: string;
+  publicPublishingAcceptedAt?: string;
+  publicRegistryUrl?: string;
   standaloneAcceptedAt?: string;
 };
 
@@ -49,12 +49,14 @@ export function parseCityToursOnboardingRecord(
   const value = input as Record<string, unknown> | null;
   if (
     !value ||
-    value.schemaVersion !== 2 ||
+    (value.schemaVersion !== 2 && value.schemaVersion !== 3) ||
     value.app !== "solid-tours" ||
     !validDateTime(value.appSpecificAcceptedAt) ||
-    !validDateTime(value.publicPublishingAcceptedAt) ||
-    !normalizePublicRegistryUrl(value.publicRegistryUrl) ||
-    normalizePublicRegistryUrl(value.publicRegistryUrl) !== value.publicRegistryUrl ||
+    (value.schemaVersion === 2 && (!value.publicPublishingAcceptedAt || !value.publicRegistryUrl)) ||
+    ((value.publicPublishingAcceptedAt !== undefined || value.publicRegistryUrl !== undefined) && (
+      !validDateTime(value.publicPublishingAcceptedAt) || !normalizePublicRegistryUrl(value.publicRegistryUrl) ||
+      normalizePublicRegistryUrl(value.publicRegistryUrl) !== value.publicRegistryUrl
+    )) ||
     (value.standaloneAcceptedAt !== undefined && !validDateTime(value.standaloneAcceptedAt)) ||
     Object.keys(value).some(
       (key) =>
@@ -71,11 +73,13 @@ export function parseCityToursOnboardingRecord(
     return null;
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: value.schemaVersion,
     app: "solid-tours",
     appSpecificAcceptedAt: value.appSpecificAcceptedAt,
-    publicPublishingAcceptedAt: value.publicPublishingAcceptedAt,
-    publicRegistryUrl: value.publicRegistryUrl,
+    ...(value.publicPublishingAcceptedAt ? {
+      publicPublishingAcceptedAt: value.publicPublishingAcceptedAt as string,
+      publicRegistryUrl: value.publicRegistryUrl as string,
+    } : {}),
     ...(value.standaloneAcceptedAt
       ? { standaloneAcceptedAt: value.standaloneAcceptedAt as string }
       : {}),
@@ -114,5 +118,20 @@ export function completeOnboardingRecord(
     ...(context === "standalone" || current?.standaloneAcceptedAt
       ? { standaloneAcceptedAt: current?.standaloneAcceptedAt || now }
       : {}),
+  };
+}
+
+/** Private consent never implies registry registration, profile changes or publishing. */
+export const privateOnboardingCompleteFor = (record: CityToursOnboardingRecord | null, context: CityToursOnboardingContext) =>
+  Boolean(record?.appSpecificAcceptedAt && (context === "embedded" || record.standaloneAcceptedAt));
+
+export function completePrivateOnboardingRecord(current: CityToursOnboardingRecord | null, context: CityToursOnboardingContext, now = new Date().toISOString()): CityToursOnboardingRecord {
+  if (!validDateTime(now)) throw new Error("Der Onboarding-Zeitpunkt ist ungültig.");
+  return {
+    ...current,
+    schemaVersion: current?.schemaVersion || 3,
+    app: "solid-tours",
+    appSpecificAcceptedAt: current?.appSpecificAcceptedAt || now,
+    ...(context === "standalone" || current?.standaloneAcceptedAt ? { standaloneAcceptedAt: current?.standaloneAcceptedAt || now } : {}),
   };
 }
