@@ -3264,7 +3264,7 @@ export default function App({
   if (loading) {
     return (
       <div
-        lang={language}
+        lang={language} translate="no"
         className={`city-tours-app city-tours-app--loading ${
           embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
         }`}
@@ -3299,7 +3299,7 @@ export default function App({
       // Keep the configured default when storage is unavailable.
     }
     return (
-      <div className="city-tours-app city-tours-app--login" lang={language}>
+      <div className="city-tours-app city-tours-app--login" lang={language} translate="no">
         <StandaloneLogin
           defaultIssuer={rememberedIssuer}
           busy={busy}
@@ -3318,7 +3318,7 @@ export default function App({
         className={`city-tours-app city-tours-app--onboarding ${
           embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
         }`}
-        lang={language}
+        lang={language} translate="no"
       >
         <CityToursOnboarding
           key={publicSetupRequired ? "publishing" : "private"}
@@ -3366,7 +3366,7 @@ export default function App({
 
   return (
     <div
-      lang={language}
+      lang={language} translate="no"
       className={`city-tours-app ${
         embedded ? "city-tours-app--embedded" : "city-tours-app--standalone"
       }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress || pendingAction || donationConfirmation ? " city-tours-app--modal-open" : ""}`}
