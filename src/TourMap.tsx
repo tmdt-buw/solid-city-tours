@@ -1,7 +1,9 @@
+import { CYCLING_CATALOG_URL, CYCLING_SOURCE_PAGE, CYCLING_LICENSE_URL } from "./municipalCyclingRoutes";
 import { useEffect, useRef } from "react";
 import L, { type LatLngExpression, type LeafletMouseEvent } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { initializeOnce } from "./mapLifecycle";
+import wuppertalDistricts from "./wuppertalDistricts.json";
 import { translate, type ToursLanguage } from "./i18n";
 import { routeDistanceMeters } from "./domain";
 import type { Coordinate, MultiLineCoordinates, TourDraft } from "./types";
@@ -66,6 +68,25 @@ export default function TourMap({
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
 
+    // Same district geometry as Environmental Monitoring. Keep the background
+    // separate from route overlays so switching tours cannot remove it.
+    wuppertalDistricts.features.forEach((district) => {
+      L.polygon(
+        district.geometry.coordinates.map((ring) =>
+          ring.map(([longitude, latitude]): LatLngExpression => [latitude, longitude])
+        ),
+        {
+          color: "white",
+          weight: 2,
+          opacity: 1,
+          fillColor: "#bdbaba",
+          fillOpacity: 0.45,
+          interactive: false,
+          className: "city-district",
+        }
+      ).addTo(map);
+    });
+
     const handleClick = (event: LeafletMouseEvent) => {
       if (editableRef.current) {
         onPointRef.current([event.latlng.lng, event.latlng.lat]);
@@ -107,6 +128,11 @@ export default function TourMap({
     const container = containerRef.current;
     if (!map || !overlay || !container) return;
 
+    const municipalAttribution = `<a href="${CYCLING_SOURCE_PAGE}" target="_blank" rel="noreferrer">Radrouten © Stadt Wuppertal</a> · <a href="${CYCLING_LICENSE_URL}" target="_blank" rel="noreferrer">CC BY 4.0</a>`;
+    map.attributionControl?.removeAttribution(municipalAttribution);
+    if (catalogPreview?.datasetUrl === CYCLING_CATALOG_URL || savedRoutes.some(route => route.adoptedFromCatalog?.datasetUrl === CYCLING_CATALOG_URL)) {
+      map.attributionControl?.addAttribution(municipalAttribution);
+    }
     overlay.clearLayers();
     savedRoutes.forEach((savedRoute) => {
       savedRoute.geometry
@@ -194,7 +220,7 @@ export default function TourMap({
       mapRef.current.invalidateSize({ pan: false });
       mapRef.current.fitBounds(L.latLngBounds(points.map(position)), { padding: [32, 32], maxZoom: 16 });
     }
-  }, [routeId, catalogPreview?.datasetUrl, fitRequest]);
+  }, [routeId, catalogPreview?.routeTemplateId, catalogPreview?.datasetUrl, fitRequest]);
 
   return <div ref={containerRef} className={`tour-map${editable ? " is-drawing" : ""}`}
     aria-label={translate(language, editable ? "keyboardDrawingHint" : "tourMap")}

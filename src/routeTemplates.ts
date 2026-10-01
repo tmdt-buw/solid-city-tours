@@ -34,6 +34,7 @@ export type RouteTemplateSnapshot = {
 
 export type CatalogedRoute = {
   routeTemplateId: string;
+  category?: "cycling";
   identifier: string;
   name: string;
   description: string;
@@ -44,6 +45,9 @@ export type CatalogedRoute = {
   geometry: MultiLineCoordinates;
   distanceMeters: number;
 };
+
+export const catalogRouteKey = (route: Pick<CatalogedRoute, "datasetUrl" | "routeTemplateId">): string =>
+  `${route.datasetUrl}|${route.routeTemplateId}`;
 
 const ownKeysOnly = (value: Record<string, unknown>, allowed: readonly string[]) =>
   Object.keys(value).every((key) => allowed.includes(key));
@@ -208,11 +212,11 @@ export function availableCatalogedRoutes(
       (candidate) => candidate.geometryKey === draftGeometryKey
     );
     if (matches.length === 1) {
-      legacyMatches.add(matches[0].route.datasetUrl);
+      legacyMatches.add(catalogRouteKey(matches[0].route));
     }
   }
 
-  return remainingRoutes.filter((route) => !legacyMatches.has(route.datasetUrl));
+  return remainingRoutes.filter((route) => !legacyMatches.has(catalogRouteKey(route)));
 }
 
 const validateRouteTemplateSize = (value: RouteTemplateSnapshot): void => {

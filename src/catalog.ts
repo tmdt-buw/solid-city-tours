@@ -1,3 +1,4 @@
+import { CYCLING_CATALOG_URL, loadMunicipalCyclingRoutes } from "./municipalCyclingRoutes";
 import {
   discoverPublicDatasets,
   ensurePublicCatalogReadiness,
@@ -308,7 +309,7 @@ export const MAX_CATALOG_ROUTE_CANDIDATES = 50;
 export const CATALOG_ROUTE_FETCH_CONCURRENCY = 6;
 
 export type CatalogRouteDiscoveryFailure = {
-  code: "invalid-catalog-url" | "route-template-rejected";
+  code: "invalid-catalog-url" | "route-template-rejected" | "source-unavailable";
   identifier: string;
   datasetUrl: string;
   distributionUrl: string;
@@ -613,13 +614,37 @@ export async function discoverCatalogedRoutes({
   fetcher,
   anonymousFetch = fetch,
   applicationOrigin = currentApplicationOrigin(),
+  includeMunicipalRoutes = false,
 }: {
   podRoot?: string;
   webId: string;
   fetcher: SolidFetch;
   anonymousFetch?: SolidFetch;
   applicationOrigin?: string;
+  includeMunicipalRoutes?: boolean;
 }): Promise<CatalogedRouteDiscovery> {
+  if (includeMunicipalRoutes) {
+    const [templates, cycling] = await Promise.allSettled([
+      discoverCatalogedRoutes({ podRoot, webId, fetcher, anonymousFetch, applicationOrigin }),
+      loadMunicipalCyclingRoutes(anonymousFetch),
+    ]);
+    if (templates.status === "rejected" && cycling.status === "rejected") throw templates.reason;
+    const templateRoutes = templates.status === "fulfilled" ? templates.value : [];
+    const report = templates.status === "fulfilled" ? getCatalogedRouteDiscoveryReport(templates.value) : null;
+    const failures: CatalogRouteDiscoveryFailure[] = [...(report?.failures || [])];
+    for (const [result, identifier, datasetUrl] of [
+      [templates, "City Tours", ""], [cycling, "Radrouten Wuppertal", CYCLING_CATALOG_URL],
+    ] as const) {
+      if (result.status === "rejected") failures.push({ code: "source-unavailable", identifier, datasetUrl,
+        distributionUrl: "", message: failureMessage(result.reason) });
+    }
+    return attachDiscoveryReport([...templateRoutes, ...(cycling.status === "fulfilled" ? cycling.value : [])], {
+      candidateCount: (report?.candidateCount || 0) + 1,
+      processedCount: (report?.processedCount || 0) + 1,
+      truncatedCount: report?.truncatedCount || 0,
+      failures,
+    });
+  }
   const metadata = await discoverPublicDatasets(catalogSession(webId, fetcher), {
     podRoot,
     identifierPrefix: ROUTE_TEMPLATE_IDENTIFIER_PREFIX,

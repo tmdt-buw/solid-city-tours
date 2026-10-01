@@ -141,3 +141,34 @@ publishes the generated `dist` package to GitHub Packages, pushes the versioned 
 images, and dispatches a Dataspace Manager rebuild. Publishing `dist` is intentional: its generated
 manifest keeps React and ReactDOM as peer dependencies so an embedded City Tours instance reuses
 the Manager's single React runtime.
+
+## Municipal cycling suggestions
+
+Discover includes a compact **All tours / Cycling routes** filter. The Wuppertal
+cycling adapter reads the existing public catalog entry
+`gesundestal/catalog/ds/e6fe12d6-4690-4986-812b-02155a8f03fc.ttl#it` and follows its
+current GeoJSON distribution using anonymous, bounded requests. It does not publish
+new route templates or alter the Pod catalog.
+
+The initial allowlist contains named municipal routes. Only an unambiguous continuous
+line or a chain of exactly connected segments is offered; no gaps are interpolated.
+Network collections, regional extracts, connectors, diversions and proposed variants
+are excluded. Some named routes (including the current Nordbahntrasse geometry) contain
+separate sections and therefore do not qualify. This checks geometry continuity, not
+current on-street accessibility or closures.
+
+Each source feature has a stable identity distinct from its shared dataset URL.
+Adoption preserves the source reference through private saving and reload, prevents
+duplicate suggestions and re-publication as an original tour, and creates no activity.
+Completion and explicit donation use the existing unchanged approval/worker flow.
+No municipal template is sent directly to Environmental Monitoring.
+
+Source: [Radrouten Wuppertal, Stadt Wuppertal](https://www.offenedaten-wuppertal.de/dataset/radrouten-wuppertal),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Coordinates are retained;
+connected source segments may be reordered/reversed and joined at exact endpoints.
+Attribution is displayed in discovery and on the map for previews/private copies.
+
+The donated-tour layer in Environmental Monitoring also credits the municipal route
+templates; its shared aggregate does not disclose individual source/owner metadata.
+
+The City Tours map uses `src/wuppertalDistricts.json`, a bundled copy of Environmental Monitoring's `public/wuppertal_bezirke.geojson` (all ten district polygons, unchanged coordinates and properties). Districts render as non-interactive gray areas with solid white borders beneath the routes. To refresh the geometry, replace the JSON with that source dataset.

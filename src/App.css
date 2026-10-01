@@ -251,9 +251,8 @@
 .city-tours-app .catalog-route-leaflet-tooltip { padding: 0; overflow: hidden; border: 1px solid #c6d5df; border-radius: 11px; box-shadow: 0 10px 26px rgba(16, 40, 74, .2); }
 .city-tours-app .catalog-route-tooltip { min-width: 180px; display: grid; gap: 3px; padding: 10px 12px; color: #405875; background: rgba(255, 255, 255, .98); font-size: .875rem; }
 .city-tours-app .catalog-route-tooltip strong { margin-bottom: 3px; color: var(--navy); font-size: .8rem; }
-.city-tours-app .map-stats { top: 14px; left: 64px; display: grid; grid-template-columns: repeat(2, minmax(88px, 1fr)); overflow: hidden; }
+.city-tours-app .map-stats { top: 14px; left: 64px; display: grid; grid-template-columns: minmax(88px, 1fr); overflow: hidden; }
 .city-tours-app .map-stats > div { min-width: 0; display: grid; gap: 2px; padding: 11px 14px; }
-.city-tours-app .map-stats > div + div { border-left: 1px solid #dce4ed; }
 .city-tours-app .map-stats span { color: var(--muted); font-size: .875rem; font-weight: 750; }
 .city-tours-app .map-stats strong { color: var(--navy); font-size: .88rem; white-space: nowrap; }
 .city-tours-app .map-edit-toolbar { bottom: 108px; left: 14px; max-width: calc(100% - 28px); display: flex; flex-wrap: wrap; gap: 5px; padding: 6px; }
@@ -490,7 +489,6 @@
 .city-tours-app .catalog-adopt,
 .city-tours-app .activity-delete { min-height: 44px; font-size: .875rem; }
 .city-tours-app .draft-actions .ghost { background: #edf3fa; color: var(--blue-dark); box-shadow: none; }
-.city-tours-app .draft-actions { border-top: 1px solid var(--line); }
 .city-tours-app .catalog-route-actions { display: grid; gap: 8px; }
 .city-tours-app .catalog-status { display: grid; gap: 12px; margin-bottom: 16px; font-size: .875rem; overflow-wrap: anywhere; }
 .city-tours-app .catalog-status details { padding: 12px; border-left: 3px solid var(--amber); background: #fff8e9; }
@@ -498,13 +496,12 @@
 .city-tours-app .workspace-error { display: flex; gap: 8px; align-items: flex-start; margin: 12px; padding: 12px; color: #84231d; background: #fff1ef; border: 1px solid #dfa39e; border-radius: 8px; font-size: .9375rem; overflow-wrap: anywhere; }
 .city-tours-app .workspace-error > span { flex: 1; }
 .city-tours-app .workspace-error button { flex: 0 0 44px; font-size: 1.25rem; padding: 0; }
-.city-tours-app .map-stats { right: 12px; grid-template-columns: 1fr 1fr; max-width: 400px; }
+.city-tours-app .map-stats { width: max-content; max-width: calc(100% - 80px); }
 .city-tours-app .map-stats strong { font-size: .9375rem; white-space: normal; }
 .city-tours-app .map-stats span { font-size: .8125rem; }
 .city-tours-app .map-legend { min-width: 0; padding: 8px 12px; box-shadow: 0 2px 8px #10284a14; gap: 5px; }
 .city-tours-app .map-legend > strong { display: none; }
 .city-tours-app .map-legend > span { font-size: .75rem; }
-.city-tours-app .fit-route-button { position: absolute; z-index: 750; bottom: 46px; left: 14px; max-width: calc(100% - 205px); background: #fff; box-shadow: 0 2px 8px #10284a24; }
 .city-tours-app .map-preview-label { position: absolute; z-index: 750; top: 110px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: #edffff; border: 1px solid #138c92; border-radius: 8px; color: #065b61; }
 .city-tours-app .map-preview-label strong { overflow-wrap: anywhere; }
 .city-tours-app .map-preview-label button { flex: 0 0 44px; }
@@ -549,12 +546,11 @@
 }
 @container city-tours-layout (max-width: 380px) {
   .city-tours-app .panel-section { padding: 16px; }
-  .city-tours-app .map-stats { left: 56px; right: 8px; }
+  .city-tours-app .map-stats { left: 56px; max-width: calc(100% - 64px); }
   .city-tours-app .map-stats > div { padding: 8px; }
   .city-tours-app .map-stats strong { font-size: .8125rem; }
   .city-tours-app .map-legend { right: 8px; padding: 8px; }
   .city-tours-app .legend-line { width: 18px; }
-  .city-tours-app .fit-route-button { left: 8px; max-width: 130px; font-size: .8125rem; padding: 8px; }
   .city-tours-app .activity-choice > div { grid-template-columns: 1fr; }
   .city-tours-app .dialog-actions { display: grid; grid-template-columns: 1fr; }
 }
@@ -567,3 +563,13 @@
 .city-tours-app .confirm-dialog .catalog-confirmation-list { font-size: .9375rem; }
 .city-tours-app .tour-map.is-drawing:focus-visible::after { content: "+"; position: absolute; top: 50%; left: 50%; z-index: 700; transform: translate(-50%, -50%); color: var(--navy); background: #ffffffd9; border-radius: 50%; padding: 0 8px; font: 28px monospace; pointer-events: none; }
 .city-tours-app .tour-map:focus-visible { outline: 3px solid var(--blue); outline-offset: -3px; }
+
+.city-tours-app .catalog-categories { display: flex; gap: 4px; padding: 4px; margin-top: 16px; border-radius: 10px; background: #edf2f7; }
+.city-tours-app .catalog-categories button { flex: 1; min-width: 0; min-height: 40px; padding: 8px; color: #43566b; border: 1px solid transparent; border-radius: 7px; background: transparent; box-shadow: none; font-size: .875rem; }
+.city-tours-app .catalog-categories button[aria-pressed="true"] { background: #fff; color: var(--navy); border-color: #d5dee8; box-shadow: 0 1px 3px rgba(16,40,74,.07); }
+.city-tours-app .catalog-categories button:focus-visible { outline: 2px solid #1759ad; outline-offset: 2px; }
+.city-tours-app .catalog-source-credit { margin: 16px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+.city-tours-app .catalog-source-credit a { color: #275d87; text-underline-offset: 2px; }
+
+.city-tours-app .catalog-about { margin-top: 16px; color: var(--muted); font-size: .875rem; }
+.city-tours-app .catalog-about summary { cursor: pointer; padding-block: 6px; }

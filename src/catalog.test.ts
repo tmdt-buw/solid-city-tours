@@ -88,6 +88,35 @@ describe("City Tours catalog publication", () => {
     });
   });
 
+  it("keeps community templates available when the municipal source fails", async () => {
+    catalogApiMocks.discoverPublicDatasets.mockResolvedValue([]);
+    solidClientMocks.getSolidDataset.mockRejectedValue(new Error("municipal source offline"));
+    const routes = await discoverCatalogedRoutes({ webId: HANNAH_WEB_ID, fetcher: vi.fn(), includeMunicipalRoutes: true });
+    expect(routes).toEqual([]);
+    expect(getCatalogedRouteDiscoveryReport(routes)?.failures).toEqual([
+      expect.objectContaining({ code: "source-unavailable", identifier: "Radrouten Wuppertal" }),
+    ]);
+  });
+
+  it("keeps municipal suggestions available when community discovery fails", async () => {
+    const catalogUrl = "https://solid-community-server.tmdt.info/gesundestal/catalog/ds/e6fe12d6-4690-4986-812b-02155a8f03fc.ttl#it";
+    const distributionUrl = "https://solid-community-server.tmdt.info/gesundestal/public/opendata/radrouten-wuppertal/routes.json";
+    const dcat = "http://www.w3.org/ns/dcat#";
+    const dataset = setThing(setThing(createSolidDataset(),
+      setUrl(createThing({ url: catalogUrl }), `${dcat}distribution`, `${catalogUrl}-dist`)),
+      setUrl(createThing({ url: `${catalogUrl}-dist` }), `${dcat}downloadURL`, distributionUrl));
+    solidClientMocks.getSolidDataset.mockResolvedValue(dataset);
+    catalogApiMocks.discoverPublicDatasets.mockRejectedValue(new Error("community registry offline"));
+    const anonymousFetch = vi.fn(async () => new Response(JSON.stringify({ type: "FeatureCollection", features: [
+      { type: "Feature", properties: { ROUTE: "Sambatrasse" }, geometry: { type: "LineString", coordinates: [[7.1, 51.2], [7.11, 51.21]] } },
+    ] }), { headers: { "Content-Type": "application/json" } }));
+    const routes = await discoverCatalogedRoutes({ webId: HANNAH_WEB_ID, fetcher: vi.fn(), anonymousFetch, includeMunicipalRoutes: true });
+    expect(routes.map(route => route.name)).toEqual(["Sambatrasse"]);
+    expect(getCatalogedRouteDiscoveryReport(routes)?.failures).toEqual([
+      expect.objectContaining({ code: "source-unavailable", identifier: "City Tours" }),
+    ]);
+  });
+
   it("writes explicitly confirmed vCard profile metadata and verifies it", async () => {
     const webId = "https://pod.example/alice/profile/card#me";
     let persisted = setThing(createSolidDataset(), createThing({ url: webId }));

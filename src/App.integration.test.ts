@@ -72,6 +72,9 @@ const leafletMocks = vi.hoisted(() => {
   const circleMarkerFactory = vi.fn(
     (_coordinates: unknown, options: Record<string, unknown> = {}) => createRouteLayer(options)
   );
+  const polygonFactory = vi.fn(
+    (_coordinates: unknown, options: Record<string, unknown> = {}) => createRouteLayer(options)
+  );
   const polylineFactory = vi.fn(
     (_coordinates: unknown, options: Record<string, unknown> = {}) => createRouteLayer(options)
   );
@@ -84,6 +87,7 @@ const leafletMocks = vi.hoisted(() => {
     zoomControl,
     circleMarkerFactory,
     polylineFactory,
+    polygonFactory,
     zoomControlFactory: vi.fn(() => zoomControl),
     mapFactory: vi.fn(() => map),
   };
@@ -97,6 +101,7 @@ vi.mock("leaflet", () => ({
     layerGroup: vi.fn(() => leafletMocks.overlay),
     map: leafletMocks.mapFactory,
     polyline: leafletMocks.polylineFactory,
+    polygon: leafletMocks.polygonFactory,
     tileLayer: vi.fn(() => leafletMocks.tileLayer),
   },
 }));
@@ -395,6 +400,31 @@ describe("City Tours app shells", () => {
     geometry: [[[7.3, 51.3], [7.4, 51.4]]], distanceMeters: 12000,
   };
 
+  it("filters municipal routes and previews/adopts siblings from one dataset independently", async () => {
+    const routes = [
+      { ...firstCatalogRoute, name: "Sambatrasse", category: "cycling" },
+      { ...firstCatalogRoute, name: "Schwarzbachtrasse", category: "cycling", routeTemplateId: "49f3344a-e58b-4f6a-a874-84e3815620e6" },
+      { ...firstCatalogRoute, name: "Community walk", datasetUrl: "https://pods.example/other/catalog/route.ttl#it" },
+    ];
+    catalogMocks.discoverCatalogedRoutes.mockResolvedValue(routes);
+    act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
+    await waitForDom(() => expect(container.querySelectorAll(".catalog-route-item")).toHaveLength(3));
+    await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-categories button")[1].click());
+    expect(container.querySelectorAll(".catalog-route-item")).toHaveLength(2);
+    await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-preview")[1].click());
+    expect(container.querySelector(".map-preview-label")?.textContent).toContain("Schwarzbachtrasse");
+    expect(container.querySelectorAll('.catalog-preview[aria-pressed="true"]')).toHaveLength(1);
+    await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-adopt")[1].click());
+    await waitForDom(() => expect(podNetworkMocks.saveDraftConditionally).toHaveBeenCalledOnce());
+    const saved = podNetworkMocks.saveDraftConditionally.mock.calls[0][1];
+    expect(saved.name).toBe("Schwarzbachtrasse");
+    expect(saved.adoptedFromCatalog.routeTemplateId).toBe(routes[1].routeTemplateId);
+    expect(container.querySelectorAll(".catalog-route-item")).toHaveLength(1);
+    expect(container.querySelector(".catalog-route-item")?.textContent).toContain("Sambatrasse");
+    expect(catalogMocks.publishCatalogEntry).not.toHaveBeenCalled();
+    expect(catalogMocks.publishRouteTemplateCatalogEntry).not.toHaveBeenCalled();
+  });
+
   it("adopts the first catalog route into an empty library and selects the saved private copy", async () => {
     catalogMocks.discoverCatalogedRoutes.mockResolvedValue([firstCatalogRoute]);
     act(() => root.render(createElement(CityToursEmbed, { webId: NON_HANNAH_WEB_ID })));
@@ -420,7 +450,7 @@ describe("City Tours app shells", () => {
     const preview = container.querySelector<HTMLElement>(".catalog-route-item")!;
     act(() => {
       preview.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: container.querySelector(".tour-map") }));
-      container.querySelector<HTMLButtonElement>(".fit-route-button")!.focus();
+      container.querySelector<HTMLElement>(".tour-map")!.focus();
     });
     expect(preview.classList.contains("is-previewed")).toBe(true);
     expect(container.querySelector(".map-preview-label")?.textContent).toContain("Katalogroute");
@@ -461,8 +491,7 @@ describe("City Tours app shells", () => {
     expect(container.querySelector(".map-stats")?.textContent).toContain("0,0 km");
     act(() => container.querySelector<HTMLButtonElement>(".map-tool-button")!.click());
     expect(container.querySelector(".map-stats")?.textContent).not.toContain("0,0 km");
-    act(() => container.querySelector<HTMLButtonElement>(".fit-route-button")!.click());
-    expect(leafletMocks.map.fitBounds).toHaveBeenCalledTimes(fitted + 1);
+    expect(leafletMocks.map.fitBounds).toHaveBeenCalledTimes(fitted);
     act(() => container.querySelector<HTMLElement>(".tour-map")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
     expect(leafletMocks.map.getCenter).toHaveBeenCalled();
   });

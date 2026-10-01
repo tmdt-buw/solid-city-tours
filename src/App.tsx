@@ -91,6 +91,7 @@ import type {
 import type { RouteCatalogPublication } from "./types";
 import {
   adoptCatalogedRoute,
+  catalogRouteKey,
   availableCatalogedRoutes,
   createRouteTemplateSnapshot,
   isDraftEligibleForCatalogPublication,
@@ -852,6 +853,7 @@ export default function App({
         webId,
         fetcher: solidFetch,
         anonymousFetch: (input, init) => globalThis.fetch(input, init),
+        includeMunicipalRoutes: true,
       });
       if (catalogAuthRevision === authRevision.current && requestRevision === catalogRequestRevision.current) {
         setCatalogedRoutes(routes);
@@ -2610,7 +2612,7 @@ export default function App({
     }
     mutate(async () => {
       if (!availableCatalogRoutes.some(
-        (candidate) => candidate.datasetUrl === route.datasetUrl
+        (candidate) => catalogRouteKey(candidate) === catalogRouteKey(route)
       )) {
         setCatalogPreviewId(null);
         return;
@@ -3350,7 +3352,7 @@ export default function App({
   const visibleDrafts = state.drafts.filter((item) => item.name.toLocaleLowerCase(language).includes(tourQuery.trim().toLocaleLowerCase(language)))
     .sort((a, b) => tourSort === "name" ? a.name.localeCompare(b.name, language) : b.updatedAt.localeCompare(a.updatedAt));
   const catalogPreview =
-    availableCatalogRoutes.find((route) => route.datasetUrl === catalogPreviewId) || null;
+    availableCatalogRoutes.find((route) => catalogRouteKey(route) === catalogPreviewId) || null;
   const uncatalogedDrafts = state.drafts.filter(
     (item) =>
       isDraftEligibleForCatalogPublication(item) &&
@@ -3653,7 +3655,6 @@ export default function App({
 
             <aside className="map-stats" aria-label={t("routeInformation")}>
               <div><span>{t("distance")}</span><strong>{distanceLabel(catalogPreview?.geometry || draft.geometry, language)}</strong></div>
-              <div><span>{t(!catalogPreview && draft.durationSource === "gpx" ? "gpxDuration" : "duration")}</span><strong>{!catalogPreview && draft.durationMinutes ? `${Math.round(draft.durationMinutes)} ${t("minutesShort")}` : t("durationAtCompletion")}</strong></div>
             </aside>
             {isEditing && activeSection === "tours" && (editablePointCount > 0 || geometryHistory.length > 0) && (
               <div className="map-edit-toolbar" role="toolbar" aria-label={t("editRoute")}>
@@ -3671,7 +3672,6 @@ export default function App({
                 </button>
               </div>
             )}
-            <button className="fit-route-button ghost" type="button" disabled={!draft.geometry.flat().length && !catalogPreview} onClick={() => setFitRequest((value) => value + 1)}>{t("fitRoute")}</button>
             {catalogPreview && <div className="map-preview-label"><strong>{catalogPreview.name}</strong><button type="button" className="ghost" onClick={() => setCatalogPreviewId(null)} aria-label={t("closePreview")}>×</button></div>}
             <aside className="map-legend" aria-label={t("mapLegend")}>
               <strong>{t("routes")}</strong>
