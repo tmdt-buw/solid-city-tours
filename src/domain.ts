@@ -227,7 +227,8 @@ export function publishedFeature(
 
 export function publishedActivityCollection(
   activities: CompletedActivity[],
-  scenarioRunId: string
+  scenarioRunId: string,
+  donationMode?: "continuous"
 ): PublishedActivityCollection {
   if (!isUuidV4(scenarioRunId)) {
     throw new Error("Die scenarioRunId ist für die Veröffentlichung ungültig.");
@@ -261,6 +262,7 @@ export function publishedActivityCollection(
       source: "solid-tours",
       scenarioRunId,
       donationScope: "all-completed-activities",
+      ...(donationMode ? { donationMode } : {}),
       activityCount: features.length,
     },
     features,

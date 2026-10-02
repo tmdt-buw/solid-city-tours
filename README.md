@@ -172,3 +172,20 @@ The donated-tour layer in Environmental Monitoring also credits the municipal ro
 templates; its shared aggregate does not disclose individual source/owner metadata.
 
 The City Tours map uses `src/wuppertalDistricts.json`, a bundled copy of Environmental Monitoring's `public/wuppertal_bezirke.geojson` (all ten district polygons, unchanged coordinates and properties). Districts render as non-interactive gray areas with solid white borders beneath the routes. To refresh the geometry, replace the JSON with that source dataset.
+
+
+### Continuous activity donations
+
+New donations carry `donationMode: "continuous"` in private state, the public marker,
+and the restricted GeoJSON collection. Future completed activities update the same
+resource with `If-Match`, preserving its ACL and access request. Private completion
+succeeds independently of donation sync; pending sync is retried while open, on
+reconnect and on reopening. Revocation never gets undone by a sync operation.
+The existing limits (100 activities, 20,000 points, 2 MiB) remain enforced.
+
+Older snapshots stay unchanged by default. Explicit prototype migration is scoped to
+`window.__APP_CONFIG__.cityToursLegacyContinuousWebIds` (exact WebIDs), which the host
+manager sets through `APP_CITY_TOURS_LEGACY_CONTINUOUS_WEBIDS_JSON`. The worker must
+use the matching `ENVIRONMENTAL_SCENARIO_LEGACY_CONTINUOUS_WEBIDS_JSON` allowlist.
+Open City Tours in each authorized account to migrate; no private data is fetched with
+service credentials, and existing read permissions and publication audience are retained.

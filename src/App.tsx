@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TourMap from "./TourMap";
+import { donationNeedsSync, legacyContinuousDonationAllowed, synchronizeContinuousDonation } from "./continuousDonation";
 import Modal from "./Modal";
 import RouteCatalog from "./RouteCatalog";
 import "./App.css";
@@ -838,6 +839,50 @@ export default function App({
       podRoot &&
       hasSolidPodAccess(webId)
   );
+  const [donationSyncStatus, setDonationSyncStatus] = useState<"idle" | "syncing" | "error">("idle");
+  const [donationRetry, setDonationRetry] = useState(0);
+  const donationAttempt = useRef("");
+  const donationSyncInFlight = useRef(false);
+  useEffect(() => {
+    const retry = () => setDonationRetry(value => value + 1);
+    const timer = window.setInterval(retry, 60_000);
+    window.addEventListener("online", retry);
+    return () => { window.clearInterval(timer); window.removeEventListener("online", retry); };
+  }, []);
+  useEffect(() => {
+    setDonationSyncStatus("idle");
+    donationAttempt.current = "";
+  }, [webId, state.activeRun?.scenarioRunId]);
+  useEffect(() => {
+    if (!podConnected || !podRoot || !webId || !solidFetch || loading || busy || donationSyncInFlight.current) return;
+    const allowLegacy = legacyContinuousDonationAllowed(webId);
+    if (!donationNeedsSync(state, allowLegacy)) return;
+    const revision = authRevision.current;
+    const attemptKey = JSON.stringify([revision, state.activeRun, state.activities.map(activity => activity.id), donationRetry]);
+    if (donationAttempt.current === attemptKey) return;
+    donationAttempt.current = attemptKey;
+    donationSyncInFlight.current = true;
+    setBusy(true);
+    setDonationSyncStatus("syncing");
+    const guardedFetch: SolidFetch = async (input, init) => {
+      if (revision !== authRevision.current || !podAccessActive.current) throw new Error("Solid session changed.");
+      const response = await solidFetch(input, init);
+      if (revision !== authRevision.current || !podAccessActive.current) throw new Error("Solid session changed.");
+      return response;
+    };
+    void synchronizeContinuousDonation({ podRoot, webId, run: state.activeRun!, fetcher: guardedFetch, allowLegacy })
+      .then(updated => {
+        if (revision !== authRevision.current) return;
+        setState(updated);
+        setDonationSyncStatus("idle");
+      }).catch(() => {
+        if (revision === authRevision.current) setDonationSyncStatus("error");
+      }).finally(() => {
+        donationSyncInFlight.current = false;
+        if (revision === authRevision.current) setBusy(false);
+      });
+  }, [podConnected, podRoot, webId, solidFetch, loading, busy, state, donationRetry]);
+
   const refreshCatalogedRoutes = useCallback(async () => {
     if (!podConnected || !podRoot || !webId || !solidFetch) {
       setCatalogedRoutes([]);
@@ -1708,13 +1753,14 @@ export default function App({
       }
       if (baseState.activeRun) throw new Error("Setze zuerst den aktiven Szenariolauf zurück.");
       const scenarioRunId = createId();
-      const snapshotPayload = publishedActivityCollection(baseState.activities, scenarioRunId);
+      const snapshotPayload = publishedActivityCollection(baseState.activities, scenarioRunId, "continuous");
       const runContainerUrl = `${storageUrls(podRoot).runs}${scenarioRunId}/`;
       const resourceUrl = `${runContainerUrl}activity.geojson`;
       const manifestUrl = `${runContainerUrl}manifest.ttl`;
       const catalogReference = catalogPublicationReference(podRoot, scenarioRunId);
       const publishedAt = new Date().toISOString();
-      const recoveryRun: ActiveRun = {
+      const recoveryRun: ActiveRun = validateActiveRun(podRoot, {
+        donationMode: "continuous",
         phase: "publishing",
         scenarioRunId,
         activityIds: baseState.activities.map((activity) => activity.id),
@@ -1723,7 +1769,7 @@ export default function App({
         runContainerUrl,
         ...catalogReference,
         publishedAt,
-      };
+      });
       let publication: Awaited<ReturnType<typeof publishCatalogEntry>> | null = null;
       let catalogAttempted = false;
       try {
@@ -1767,6 +1813,7 @@ export default function App({
             ...catalogReference,
             distributionUrl: resourceUrl,
             publishedAt,
+            donationMode: "continuous",
           },
           webId,
           solidFetch
@@ -3628,6 +3675,9 @@ export default function App({
                   {state.activeRun && <div className="donation-status" role="status">
                     <strong>{t(state.activeRun.phase === "published" ? "donationPrepared" : state.activeRun.phase === "resetting" ? "donationResetting" : "donationPublishing")}</strong>
                     <p>{t("donationIncluded", { included: state.activeRun.activityIds.length, additional: state.activities.filter((activity) => !state.activeRun!.activityIds.includes(activity.id)).length })}</p>
+                    <p>{t(state.activeRun.donationMode === "continuous" ? "donationContinuous" : "donationLegacy")}</p>
+                    {donationSyncStatus === "syncing" && <p role="status">{t("donationSyncing")}</p>}
+                    {donationSyncStatus === "error" && <div role="alert"><p>{t("donationSyncFailed")}</p><button type="button" className="ghost" disabled={busy} onClick={() => setDonationRetry(value => value + 1)}>{t("donationRetry")}</button></div>}
                     <p>{t("donationNextStep")}</p>
                     <a href="/notifications">{t("manageRequests")}</a>
                   </div>}

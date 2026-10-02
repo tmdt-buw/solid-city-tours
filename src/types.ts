@@ -63,6 +63,8 @@ export type CompletedActivity = {
 };
 
 export type ActiveRun = {
+  donationMode?: "continuous";
+  lastSyncedAt?: string;
   phase: "publishing" | "published" | "resetting";
   scenarioRunId: string;
   activityIds: string[];
@@ -135,6 +137,7 @@ export type PublishedActivityCollection = {
     source: "solid-tours";
     scenarioRunId: string;
     donationScope: "all-completed-activities";
+    donationMode?: "continuous";
     activityCount: number;
   };
   features: PublishedActivityFeature[];

@@ -157,3 +157,14 @@ describe("run-scoped published marker CAS", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+
+it("round-trips continuous mode regardless of input property order", async () => {
+  const value = { ...marker(), donationMode: "continuous" as const };
+  const fetcher = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 404 }))
+    .mockResolvedValueOnce(new Response(null, { status: 201 }))
+    .mockResolvedValueOnce(markerResponse(value));
+  const result = await writePublishedMarker(podRoot, { donationMode: "continuous", ...markerInput() }, ownerWebId, fetcher);
+  expect(result.marker.donationMode).toBe("continuous");
+});

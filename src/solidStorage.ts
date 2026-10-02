@@ -1559,6 +1559,7 @@ export async function saveRunSnapshot(
 }
 
 export type PublishedMarker = {
+  donationMode?: "continuous";
   schemaVersion: 1;
   source: "solid-tours";
   status: "published";
@@ -1587,6 +1588,7 @@ function validatePublishedMarker(value: unknown): PublishedMarker {
   if (
     !marker ||
     marker.schemaVersion !== 1 ||
+    (marker.donationMode !== undefined && marker.donationMode !== "continuous") ||
     marker.source !== "solid-tours" ||
     marker.status !== "published" ||
     !isUuidV4(marker.scenarioRunId) ||
@@ -1606,6 +1608,7 @@ function validatePublishedMarker(value: unknown): PublishedMarker {
     catalogDatasetUrl: marker.catalogDatasetUrl,
     distributionUrl: marker.distributionUrl,
     publishedAt: marker.publishedAt,
+    ...(marker.donationMode === "continuous" ? { donationMode: "continuous" as const } : {}),
   };
 }
 
@@ -1670,8 +1673,7 @@ export async function writePublishedMarker(
   ownerWebId: string,
   fetcher: SolidFetch
 ): Promise<PublishedMarkerSnapshot & { marker: PublishedMarker; etag: string }> {
-  const expectedMarker = publishedMarker(marker);
-  validatePublishedMarker(expectedMarker);
+  const expectedMarker = validatePublishedMarker(publishedMarker(marker));
   const markerUrl = storageUrls(podRoot).marker;
   const current = await loadPublishedMarkerSnapshot(podRoot, fetcher);
   if (current.marker && current.marker.scenarioRunId !== marker.scenarioRunId) {

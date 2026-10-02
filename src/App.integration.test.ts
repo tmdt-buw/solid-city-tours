@@ -234,7 +234,8 @@ import RawCityToursEmbed, {
 import { localStateKeyForIdentity } from "./localStorage";
 import { StateConflictError } from "./solidStorage";
 import type { CityToursSession } from "./embedAuth";
-import type { ActiveRun, RouteCatalogPublication, TourDraft } from "./types";
+import { publishedActivityCollection } from "./domain";
+import type { ActiveRun, RouteCatalogPublication, TourDraft, ToursState } from "./types";
 import { TOURS_LANGUAGE_EVENT, TOURS_LANGUAGE_STORAGE_KEY } from "./i18n";
 import {
   ROUTE_TEMPLATE_IDENTIFIER_PREFIX,
@@ -3351,6 +3352,62 @@ describe("City Tours app shells", () => {
     expect(persistedState).toEqual(
       expect.objectContaining({ activities: [], activeRun: null })
     );
+  });
+
+  it("automatically catches up an existing continuous donation and retries after a network failure", async () => {
+    const podRoot = "https://solid-community-server.tmdt.info/sscon/";
+    const scenarioRunId = "7a64c06e-793f-4ab2-85af-fb8bfbd7ae77";
+    const runContainerUrl = `${podRoot}solid-tours/runs/${scenarioRunId}/`;
+    const activeRun: ActiveRun = {
+      phase: "published", donationMode: "continuous", scenarioRunId,
+      activityIds: [podStateWithTwoActivities.activities[0].id],
+      resourceUrl: `${runContainerUrl}activity.geojson`, manifestUrl: `${runContainerUrl}manifest.ttl`, runContainerUrl,
+      datasetIdentifier: `solid-tours-activity-${scenarioRunId}`,
+      catalogDatasetUrl: `${podRoot}catalog/ds/solid-tours-activity-${scenarioRunId}.ttl#it`,
+      publishedAt: "2026-08-21T12:00:00.000Z",
+    };
+    let persisted: ToursState = { ...validateLocalToursState(podStateWithTwoActivities), activeRun };
+    let payload = publishedActivityCollection([persisted.activities[0]], scenarioRunId, "continuous");
+    let fail = true;
+    const managerFetch = vi.fn(async (input, init = {}) => {
+      if (String(input) === activeRun.resourceUrl) {
+        if (init.method === "PUT") {
+          if (fail) return new Response(null, { status: 503 });
+          payload = JSON.parse(String(init.body));
+          return new Response(null, { status: 204 });
+        }
+        return new Response(JSON.stringify(payload), { status: 200, headers: { ETag: '"resource-v1"' } });
+      }
+      if (String(input).endsWith("/current-run.json")) return new Response(JSON.stringify({
+        schemaVersion: 1, source: "solid-tours", status: "published", donationMode: "continuous", scenarioRunId,
+        distributionUrl: activeRun.resourceUrl, catalogDatasetUrl: activeRun.catalogDatasetUrl,
+        datasetIdentifier: activeRun.datasetIdentifier, publishedAt: activeRun.publishedAt,
+      }), { status: 200, headers: { ETag: '"marker-v1"' } });
+      throw new Error(`Unexpected donation request: ${String(input)}`);
+    });
+    podNetworkMocks.resolvePodRoot.mockResolvedValue(podRoot);
+    podNetworkMocks.ensureStorage.mockResolvedValue(undefined);
+    podNetworkMocks.loadState.mockResolvedValue(persisted);
+    podNetworkMocks.loadStateSnapshot.mockImplementation(async () => ({ state: persisted, etag: '"state-v1"' }));
+    podNetworkMocks.saveStateIfUnchanged.mockImplementation(async (_root, nextState) => {
+      persisted = nextState;
+      return { state: persisted, etag: '"state-v2"' };
+    });
+    act(() => root.render(createElement(CityToursEmbed, {
+      webId: HANNAH_WEB_ID,
+      session: { info: { isLoggedIn: true, webId: HANNAH_WEB_ID }, fetch: managerFetch },
+    })));
+    await waitForDom(() => expect(container.querySelector(".donation-status [role=alert]")).not.toBeNull());
+    expect(persisted.activities).toHaveLength(2);
+    expect(persisted.activeRun?.activityIds).toHaveLength(1);
+    fail = false;
+    act(() => container.querySelector<HTMLButtonElement>(".donation-status [role=alert] button")!.click());
+    await waitForDom(() => expect(persisted.activeRun?.activityIds).toHaveLength(2));
+    expect(payload.properties.activityCount).toBe(2);
+    expect(persisted.activeRun?.resourceUrl).toBe(activeRun.resourceUrl);
+    expect(podNetworkMocks.writePublishedMarker).not.toHaveBeenCalled();
+    expect(catalogMocks.publishCatalogEntry).not.toHaveBeenCalled();
+    expect(accessRequestMocks.revokeAndArchiveScenarioAccess).not.toHaveBeenCalled();
   });
 
   it("replaces an active donation with a new run after deleting one of several completed activities", async () => {

@@ -291,8 +291,16 @@ export function validateActiveRun(podRoot: string, activeRun: unknown): ActiveRu
   if (!validIsoDateTime(value.publishedAt)) {
     throw new Error("Der aktive Szenariolauf enthält keinen gültigen Publish-Zeitpunkt.");
   }
+  if (value.donationMode !== undefined && value.donationMode !== "continuous") {
+    throw new Error("Unsupported donation mode.");
+  }
+  if (value.lastSyncedAt !== undefined && !validIsoDateTime(value.lastSyncedAt)) {
+    throw new Error("Invalid donation synchronization time.");
+  }
   return {
     phase: phase as ActiveRun["phase"],
+    ...(value.donationMode === "continuous" ? { donationMode: "continuous" as const } : {}),
+    ...(typeof value.lastSyncedAt === "string" ? { lastSyncedAt: value.lastSyncedAt } : {}),
     scenarioRunId: value.scenarioRunId,
     activityIds,
     resourceUrl: expected.resourceUrl,
