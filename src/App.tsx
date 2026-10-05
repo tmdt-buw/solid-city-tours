@@ -3722,7 +3722,6 @@ export default function App({
                 </button>
               </div>
             )}
-            {catalogPreview && <div className="map-preview-label"><strong>{catalogPreview.name}</strong><button type="button" className="ghost" onClick={() => setCatalogPreviewId(null)} aria-label={t("closePreview")}>×</button></div>}
             <aside className="map-legend" aria-label={t("mapLegend")}>
               <strong>{t("routes")}</strong>
               <span><i className="legend-line legend-line--current" />{t("currentTour")}</span>

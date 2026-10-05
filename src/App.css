@@ -502,9 +502,6 @@
 .city-tours-app .map-legend { min-width: 0; padding: 8px 12px; box-shadow: 0 2px 8px #10284a14; gap: 5px; }
 .city-tours-app .map-legend > strong { display: none; }
 .city-tours-app .map-legend > span { font-size: .75rem; }
-.city-tours-app .map-preview-label { position: absolute; z-index: 750; top: 110px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: #edffff; border: 1px solid #138c92; border-radius: 8px; color: #065b61; }
-.city-tours-app .map-preview-label strong { overflow-wrap: anywhere; }
-.city-tours-app .map-preview-label button { flex: 0 0 44px; }
 .city-tours-app .confirm-dialog { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); height: fit-content; color: var(--ink); padding: 24px; }
 .city-tours-app .confirm-dialog::backdrop { background: #08192fb3; backdrop-filter: blur(3px); }
 .city-tours-app .confirm-dialog:not([open]) { display: none; }

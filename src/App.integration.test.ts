@@ -413,7 +413,7 @@ describe("City Tours app shells", () => {
     await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-categories button")[1].click());
     expect(container.querySelectorAll(".catalog-route-item")).toHaveLength(2);
     await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-preview")[1].click());
-    expect(container.querySelector(".map-preview-label")?.textContent).toContain("Schwarzbachtrasse");
+    expect(container.querySelector(".catalog-route-item.is-previewed")?.textContent).toContain("Schwarzbachtrasse");
     expect(container.querySelectorAll('.catalog-preview[aria-pressed="true"]')).toHaveLength(1);
     await act(async () => container.querySelectorAll<HTMLButtonElement>(".catalog-adopt")[1].click());
     await waitForDom(() => expect(podNetworkMocks.saveDraftConditionally).toHaveBeenCalledOnce());
@@ -454,8 +454,9 @@ describe("City Tours app shells", () => {
       container.querySelector<HTMLElement>(".tour-map")!.focus();
     });
     expect(preview.classList.contains("is-previewed")).toBe(true);
-    expect(container.querySelector(".map-preview-label")?.textContent).toContain("Katalogroute");
-    act(() => container.querySelector<HTMLButtonElement>(".map-preview-label button")!.click());
+    expect(container.querySelector(".map-preview-label")).toBeNull();
+    expect(preview.querySelector(".catalog-preview")?.getAttribute("aria-pressed")).toBe("true");
+    act(() => preview.querySelector<HTMLButtonElement>(".catalog-preview")!.click());
     expect(preview.classList.contains("is-previewed")).toBe(false);
   });
 
