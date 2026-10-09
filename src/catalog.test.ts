@@ -405,6 +405,7 @@ describe("City Tours public route Catalog", () => {
         description: "Public reusable route template from City Tours.",
         distributionUrl: resourceUrl,
         mediaType: "application/geo+json",
+        conformsTo: ["https://geojson.org/schema/Feature.json"],
         publisher: "Hannah Mueller",
         publisherWebId: webId,
         contactPoint: "hannah.mueller@sscon-praesentation.de",

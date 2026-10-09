@@ -12,6 +12,7 @@ declare module "@hoelk-f/semantic-data-catalog/catalog-api" {
     description?: string;
     distributionUrl: string;
     mediaType?: string;
+    conformsTo?: string[];
     publisher?: string;
     publisherWebId?: string;
     publisherUrl?: string;
@@ -41,7 +42,7 @@ declare module "@hoelk-f/semantic-data-catalog/catalog-api" {
   export type PublicDatasetInput = RestrictedDatasetInput & {
     title: string;
     mediaType: string;
-    theme: string;
+    theme?: string;
   };
 
   export type DiscoveredPublicDataset = {
