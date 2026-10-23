@@ -1,0 +1,5 @@
+body.dataspace-standalone .city-tours-app--standalone { background: #f7f9fc; }
+body.dataspace-standalone .city-tours-app--standalone > .tours-shell { padding: 24px; }
+body.dataspace-standalone .city-tours-app--login { height: auto; overflow: visible; }
+body.dataspace-standalone .city-tours-login__intro { margin: 0; padding: 20px 24px 0; color: #60728f; font-size: 15px; }
+@media(max-width:700px) { body.dataspace-standalone .city-tours-app--standalone > .tours-shell { padding: 16px; } }

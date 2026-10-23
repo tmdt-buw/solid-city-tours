@@ -1,3 +1,4 @@
+import StandaloneFooter from "./standalone/StandaloneFooter";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TourMap from "./TourMap";
 import { donationNeedsSync, legacyContinuousDonationAllowed, synchronizeContinuousDonation } from "./continuousDonation";
@@ -3234,11 +3235,6 @@ export default function App({
       );
     }, 20_000);
     try {
-      try {
-        window.localStorage.setItem("solid-tours:oidc-issuer", issuer);
-      } catch {
-        // A blocked browser store must not prevent the Solid redirect.
-      }
       if (bridge?.login) {
         await bridge.login(issuer);
         window.clearTimeout(redirectWatchdog);
@@ -3340,23 +3336,17 @@ export default function App({
   }
 
   if (!embedded && !isAuthenticated) {
-    let rememberedIssuer = DEFAULT_ISSUER;
-    try {
-      rememberedIssuer =
-        window.localStorage.getItem("solid-tours:oidc-issuer") || DEFAULT_ISSUER;
-    } catch {
-      // Keep the configured default when storage is unavailable.
-    }
     return (
-      <div className="city-tours-app city-tours-app--login" lang={language} translate="no">
+      <div className="city-tours-app city-tours-app--login" data-standalone-shell lang={language} translate="no">
         <StandaloneLogin
-          defaultIssuer={rememberedIssuer}
+          defaultIssuer={DEFAULT_ISSUER}
           busy={busy}
           error={error}
           language={language}
           onLanguageChange={changeStandaloneLanguage}
           onLogin={login}
         />
+        <StandaloneFooter title="City Tours" version={appVersion} language={language} assetsBase={"/city-tours"} />
       </div>
     );
   }
@@ -3421,14 +3411,14 @@ export default function App({
       }${completeConfirmation || deleteConfirmation || catalogConfirmation || completionInProgress || pendingAction || donationConfirmation ? " city-tours-app--modal-open" : ""}`}
     >
       {!embedded && (
-        <header className="app-header">
-          <div className="app-brand">
-            <span className="app-brand-mark" aria-hidden="true">
+        <header className="app-header" data-standalone-header>
+          <div className="app-brand" data-standalone-brand>
+            <span className="app-brand-mark" data-standalone-icon aria-hidden="true">
               <FontAwesomeIcon icon="route" />
             </span>
             <strong>City Tours</strong>
           </div>
-          <div className="header-actions">
+          <div className="header-actions" data-standalone-actions>
             <div className="header-user" title={authenticatedWebId || undefined}>
               {authenticatedPhotoSrc ? (
                 <img
@@ -3954,21 +3944,7 @@ export default function App({
       )}
       </main>
       {!embedded && (
-        <footer className="app-footer">
-          <div className="footer-logo-group" aria-label="Project partners">
-            <img
-              src="/semantic-data-catalog/assets/images/Logo_BUW.png"
-              alt="Logo BUW"
-              className="footer-logo footer-logo--buw"
-            />
-            <img
-              src="/semantic-data-catalog/assets/images/Logo_TMDT.png"
-              alt="Logo TMDT"
-              className="footer-logo footer-logo--tmdt"
-            />
-          </div>
-          <div className="footer-version">City Tours {appVersion}</div>
-        </footer>
+        <StandaloneFooter className="app-footer" title="City Tours" version={appVersion} language={language} assetsBase={"/city-tours"} />
       )}
     </div>
   );

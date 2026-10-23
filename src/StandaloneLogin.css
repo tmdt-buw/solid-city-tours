@@ -148,62 +148,14 @@
   letter-spacing: 0.2px;
 }
 
-.city-tours-login .login-visual-band {
-  box-sizing: content-box;
-  position: relative;
-  z-index: 1;
-  height: clamp(336px, 42vw, 456px);
-  margin: 14px 16px;
-  overflow: hidden;
-  border-radius: 22px;
-  border-bottom: 1px solid rgba(148, 163, 184, .28);
-  background: radial-gradient(circle at 48% 35%, rgba(30, 64, 175, .28), transparent 42%), linear-gradient(180deg, #0b1220 0%, #0f172a 62%, #111827 100%);
-  box-shadow: inset 0 24px 52px rgba(15, 23, 42, 0.38);
-}
 
-.city-tours-login .login-particle-cloud {
-  position: absolute;
-  inset: 0;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.city-tours-login .login-particle-cloud.is-dragging { cursor: grabbing; }
-.city-tours-login .login-particle-cloud canvas { width: 100%; height: 100%; display: block; }
-.city-tours-login .login-particle-cloud::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(286px, 36%);
-  aspect-ratio: 1;
-  border: 1px solid rgba(226, 232, 240, .16);
-  border-radius: 999px;
-  pointer-events: none;
-  background: radial-gradient(circle, rgba(226, 232, 240, .055), rgba(226, 232, 240, .025) 58%, transparent 72%);
-  box-shadow: inset 0 0 42px rgba(15, 23, 42, .45), 0 0 44px rgba(147, 197, 253, .12);
-  transform: translate(-50%, -50%);
-}
-.city-tours-login .login-particle-cloud__label {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 3;
-  color: #f8fafc;
-  font-size: clamp(13px, 1.55vw, 19px);
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-align: center;
-  text-shadow: 0 0 14px rgba(147, 197, 253, .62), 0 2px 8px rgba(15, 23, 42, .95);
-  text-transform: uppercase;
-  white-space: nowrap;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-.city-tours-login .login-particle-cloud--fallback {
-  background: radial-gradient(circle at 35% 42%, rgba(248, 250, 252, .74) 0 2px, transparent 3px), radial-gradient(circle at 64% 56%, rgba(147, 197, 253, .66) 0 2px, transparent 3px), linear-gradient(180deg, #0b1220, #111827);
-  background-size: 42px 42px, 54px 54px, auto;
-}
+
+
+
+
+
+
+
 
 .city-tours-login .city-tours-login__card {
   position: relative;
@@ -413,7 +365,7 @@
 @media (max-width: 560px) {
   .city-tours-login { padding-inline: 12px; }
   .city-tours-login .city-tours-login__shell { border-radius: 20px; }
-  .city-tours-login .login-visual-band { height: 312px; margin: 12px; border-radius: 20px; }
+
   .city-tours-login .city-tours-login__providers { grid-template-columns: 1fr; }
   .city-tours-login .city-tours-login__actions {
     display: grid;

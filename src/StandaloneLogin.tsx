@@ -1,8 +1,8 @@
+import LoginParticleCloud from "./standalone/LoginParticleCloud";
 import { FormEvent, useId, useMemo, useState } from "react";
 import "./StandaloneLogin.css";
 import FontAwesomeIcon from "./FontAwesomeIcon";
 import LanguageToggle from "./LanguageToggle";
-import LoginParticleCloud from "./LoginParticleCloud";
 import {
   DEFAULT_TOURS_LANGUAGE,
   localizeUserFacingMessage,
@@ -97,10 +97,10 @@ export default function StandaloneLogin({
   };
 
   return (
-    <main className="city-tours-login">
-      <div className="city-tours-login__stage">
-        <section className="city-tours-login__shell" aria-labelledby="city-tours-login-title">
-          <header className="city-tours-login__hero">
+    <main className="city-tours-login" data-standalone-login>
+      <div className="city-tours-login__stage" data-standalone-login-stage>
+        <section className="city-tours-login__shell" data-standalone-login-card aria-labelledby="city-tours-login-title">
+          <header className="city-tours-login__hero" data-standalone-login-heading>
             <div className="city-tours-login__hero-left">
               <span className="city-tours-login__brand-icon" aria-hidden="true">
                 <FontAwesomeIcon icon="route" />
@@ -109,10 +109,12 @@ export default function StandaloneLogin({
             </div>
           </header>
 
-          <p className="city-tours-login__intro">{language === "de" ? "Plane Touren in Wuppertal. Speichere sie privat und entscheide selbst, was du teilst." : "Plan tours in Wuppertal. Save them privately and choose what you share."}</p>
           <LoginParticleCloud label="City Tours" />
 
-          <form className="city-tours-login__card" onSubmit={submit} noValidate>
+          <p className="city-tours-login__intro">{language === "de" ? "Plane Touren in Wuppertal. Speichere sie privat und entscheide selbst, was du teilst." : "Plan tours in Wuppertal. Save them privately and choose what you share."}</p>
+
+
+          <form className="city-tours-login__card" data-standalone-login-form onSubmit={submit} noValidate>
           <p>{language === "de" ? "Melde dich mit deinem Solid-Konto an. Dein Pod ist dein persönlicher Datenspeicher; du bestimmst, wer Zugriff erhält." : "Sign in with your Solid account. Your Pod is your personal data store; you choose who has access."}</p>
           <fieldset className="city-tours-login__fieldset" disabled={busy}>
             <legend className="city-tours-login__legend">{translate(language, "suggestedProviders")}</legend>
@@ -189,7 +191,7 @@ export default function StandaloneLogin({
             </div>
           )}
 
-          <footer className="city-tours-login__actions">
+          <footer className="city-tours-login__actions" data-standalone-login-actions>
             {onLanguageChange && (
               <div className="city-tours-login__language">
                 <LanguageToggle language={language} onChange={onLanguageChange} />
