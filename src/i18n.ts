@@ -47,7 +47,7 @@ const translations = {
   cyclingDataSource: { en: "Cycling route data:", de: "Radrouten-Geodaten:" },
   catalogSourceUnavailable: { en: "Source currently unavailable", de: "Quelle derzeit nicht erreichbar" },
   keyboardDrawingHint: { en: "Tour map: use arrow keys to pan and Enter to add a point at the center", de: "Tourenkarte: Mit Pfeiltasten verschieben, mit Enter einen Punkt in der Mitte setzen" },
-  gpxAndEstimatedValues: { en: "Duration from GPX · other activity values estimated", de: "Dauer aus GPX · übrige Aktivitätswerte geschätzt" },
+  gpxAndEstimatedValues: { en: "Duration from GPX; other activity values estimated", de: "Dauer aus GPX; übrige Aktivitätswerte geschätzt" },
   activityEstimatesExplanation: { en: "These values are derived, not recorded by sensors. Without GPX timing, duration assumes 4.5 km/h walking or 15 km/h cycling. Steps assume a 0.75 m stride.", de: "Die Werte sind abgeleitet, keine Sensormessungen. Ohne GPX-Zeitdaten wird die Dauer mit 4,5 km/h zu Fuß oder 15 km/h auf dem Fahrrad geschätzt. Für Schritte gilt eine Schrittlänge von 0,75 m." },
   discover: { en: "Discover", de: "Entdecken" },
   activities: { en: "Activities", de: "Aktivitäten" },

@@ -1,6 +1,7 @@
 import StandaloneFooter from "./standalone/StandaloneFooter";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TourMap from "./TourMap";
+import ActivityCard from "./ActivityCard";
 import { donationNeedsSync, legacyContinuousDonationAllowed, synchronizeContinuousDonation } from "./continuousDonation";
 import Modal from "./Modal";
 import RouteCatalog from "./RouteCatalog";
@@ -318,16 +319,6 @@ const distanceLabel = (geometry: MultiLineCoordinates, language: ToursLanguage) 
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} km`;
-
-function summaryText(activity: CompletedActivity, language: ToursLanguage) {
-  const summary = activity.activitySummary;
-  const base = `${(summary.distanceMeters / 1000).toLocaleString(numberLocale(language), {
-    maximumFractionDigits: 1,
-  })} km · ${summary.activeMinutes} ${translate(language, "minutesShort")}`;
-  return "estimatedSteps" in summary
-    ? `${base} · ${translate(language, "approximately")} ${summary.estimatedSteps.toLocaleString(numberLocale(language))} ${language === "en" ? translate(language, "steps").toLowerCase() : translate(language, "steps")}`
-    : `${base} · ${translate(language, "averageSpeed")} ${summary.averageSpeedKmh.toLocaleString(numberLocale(language))} km/h`;
-}
 
 function CompletionLoadingOverlay({
   activityType,
@@ -3449,7 +3440,7 @@ export default function App({
 
       <main className="tours-shell">
 
-        <section className={`route-workspace${mobileMapOpen ? " is-map-open" : ""}`} aria-label={t("workspace")}>
+        <section className={`route-workspace${activeSection === "activities" ? " route-workspace--activities" : ""}${mobileMapOpen ? " is-map-open" : ""}`} aria-label={t("workspace")}>
           <nav className="workspace-nav" aria-label={t("workspace")}>
             {(["tours", "discover", "activities", "sharing"] as const).map((section) => <button key={section} type="button"
               aria-current={activeSection === section ? "page" : undefined}
@@ -3628,21 +3619,8 @@ export default function App({
                     <p className="empty">{t("noCompletedTours")}</p>
                   )}
                   {state.activities.map((activity) => (
-                    <article className="activity-item" key={activity.id}>
-                      <div>
-                        <strong>{activity.name}</strong>
-                        <small>{formatDate(activity.completedDate, language)} · {t(activity.activityType === "walking" ? "walking" : "cycling")}</small>
-                        <small>{summaryText(activity, language)}</small>
-                        <small className="estimate-label">{t(activity.activitySummary.durationSource === "gpx" ? "gpxAndEstimatedValues" : "estimatedValues")}</small>
-                      </div>
-                      <button
-                        className="delete-link activity-delete"
-                        disabled={busy}
-                        onClick={() => requestActivityRemoval(activity)}
-                      >
-                        {t("delete")}
-                      </button>
-                    </article>
+                    <ActivityCard key={activity.id} activity={activity} language={language}
+                      busy={busy} onDelete={() => requestActivityRemoval(activity)} />
                   ))}
                 </div>
               </section>
