@@ -68,7 +68,7 @@ export default function TourMap({
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
 
-    // Same district geometry as Environmental Monitoring. Keep the background
+    // Same district geometry as Urban Data Explorer. Keep the background
     // separate from route overlays so switching tours cannot remove it.
     wuppertalDistricts.features.forEach((district) => {
       L.polygon(

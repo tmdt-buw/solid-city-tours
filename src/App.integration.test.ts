@@ -3833,7 +3833,7 @@ describe("City Tours app shells", () => {
 
     expect(container.textContent).toContain("Spende vorbereiten");
     expect(container.querySelector(".scenario-card")).toBeNull();
-    expect(container.textContent).not.toContain("Environmental Monitoring");
+    expect(container.textContent).not.toContain("Urban Data Explorer");
     expect(container.textContent).not.toContain("Bereit zum Veröffentlichen");
     expect(container.textContent).not.toContain("Aktivitätsverlauf");
 

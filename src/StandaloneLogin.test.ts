@@ -75,7 +75,7 @@ describe("StandaloneLogin", () => {
       "City Tours"
     );
     expect(container.textContent).not.toContain("Alle Solid-Konten");
-    expect(container.textContent).not.toContain("Environmental Monitoring");
+    expect(container.textContent).not.toContain("Urban Data Explorer");
     expect(container.textContent).not.toContain("Demo-Konto");
     const languageControl = container.querySelector(
       ".city-tours-login__actions .city-tours-login__language .language-toggle"

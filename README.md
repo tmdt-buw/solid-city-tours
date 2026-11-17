@@ -26,14 +26,22 @@ dispatches `city-tours-released`; Manager CI waits for the exact package version
 For local development, use the Compose local-package mode to build and link the
 renamed embed package directly from the existing checkout.
 
-## Development
+## Development and standalone deployment
+
+For the complete stack and live embedded builds, use the [central local guide](https://github.com/hoelk-f/solid-dataspace/blob/main/LOCAL_DEVELOPMENT.md). It imports the exact catalog SDK package from the selected Manager image, so no private npm token is needed in that mode. Checkouts and image package versions must match.
+
+For direct development use Node 22 or 24. A direct `npm ci` needs read access to the `@hoelk-f/semantic-data-catalog` package in GitHub Packages; configure an authorized token outside tracked files.
 
 ```sh
-npm install
+npm ci
 npm test
 npm run build
 npm start
 ```
+
+Open `http://localhost:3006/city-tours/`. `npm run build` checks types and creates standalone and embed bundles. `Dockerfile` packages the standalone view; its private dependency access must be supplied according to that build's npm configuration. The published image is `son1i/city-tours`.
+
+Example route provenance and licenses are recorded in [public/example-routes/README.md](public/example-routes/README.md). These routes are existing map geometry, not live GPS traces.
 
 ## Tour workspace and consent
 
@@ -61,10 +69,7 @@ the Discover panel explains this if setup is missing.
 
 Recording an activity asks for its date and walking/cycling type in one modal.
 Duration from GPX is distinguished from estimates; the derivation assumptions are
-shown before saving. Donation preparation previews the fixed set of completed
-activities and explains public metadata and the separate access request. The
-Sharing panel reports only local publication state and how many newer activities
-are excluded. It links to the Manager at `/notifications`; it does not infer
+shown before saving. Donation preparation previews the included completed activities and explains public metadata and the separate access request. New donations use the continuous mode described below: later completed activities can update the same publication while it remains active. Older snapshot donations keep their original membership unless explicitly migrated/reset. The Sharing panel reports publication state; a legacy snapshot may show newer excluded activities. It links to the Manager at `/notifications`; it does not infer
 worker access or successful processing. Revocation cannot recall downloaded copies.
 
 The shared modal uses native `showModal()` for a document-wide inert background,
@@ -131,7 +136,7 @@ Three real Wuppertal GeoJSON tracks for testing the importer are available in
 their source, `© OpenStreetMap contributors` attribution and ODbL 1.0 license are documented in
 that directory and embedded in every file.
 
-The Catalog SDK dependency is pinned to `0.8.77` for fail-closed restricted publication and
+The Catalog SDK dependency is pinned in `package.json` and `package-lock.json` for fail-closed restricted publication and
 public route-template discovery.
 Local stack development can link the sibling Catalog `dist` package directly without changing the
 registry-based lockfile.
@@ -161,17 +166,17 @@ Each source feature has a stable identity distinct from its shared dataset URL.
 Adoption preserves the source reference through private saving and reload, prevents
 duplicate suggestions and re-publication as an original tour, and creates no activity.
 Completion and explicit donation use the existing unchanged approval/worker flow.
-No municipal template is sent directly to Environmental Monitoring.
+No municipal template is sent directly to Urban Data Explorer.
 
 Source: [Radrouten Wuppertal, Stadt Wuppertal](https://www.offenedaten-wuppertal.de/dataset/radrouten-wuppertal),
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Coordinates are retained;
 connected source segments may be reordered/reversed and joined at exact endpoints.
 Attribution is displayed in discovery and on the map for previews/private copies.
 
-The donated-tour layer in Environmental Monitoring also credits the municipal route
+The donated-tour layer in Urban Data Explorer also credits the municipal route
 templates; its shared aggregate does not disclose individual source/owner metadata.
 
-The City Tours map uses `src/wuppertalDistricts.json`, a bundled copy of Environmental Monitoring's `public/wuppertal_bezirke.geojson` (all ten district polygons, unchanged coordinates and properties). Districts render as non-interactive gray areas with solid white borders beneath the routes. To refresh the geometry, replace the JSON with that source dataset.
+The City Tours map uses `src/wuppertalDistricts.json`, a bundled copy of Urban Data Explorer's `public/wuppertal_bezirke.geojson` (all ten district polygons, unchanged coordinates and properties). Districts render as non-interactive gray areas with solid white borders beneath the routes. To refresh the geometry, replace the JSON with that source dataset.
 
 
 ### Continuous activity donations
