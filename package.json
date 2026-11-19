@@ -1,6 +1,6 @@
 {
   "name": "@hoelk-f/city-tours",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "private": false,
   "license": "Apache-2.0",
   "type": "module",
@@ -33,7 +33,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
-    "@hoelk-f/semantic-data-catalog": "0.8.98",
+    "@hoelk-f/semantic-data-catalog": "0.8.99",
     "@inrupt/oidc-client-ext": "5.0.3",
     "@inrupt/solid-client": "1.30.2",
     "@inrupt/solid-client-authn-browser": "5.0.3",
